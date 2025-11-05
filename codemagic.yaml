@@ -8,7 +8,7 @@ workflows:
     environment:
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.grouplld.BreathSphere
+        bundle_identifier: com.hsstuinhappchick.CookStudio
       vars:
         APP_STORE_CONNECT_KEY: cook_studio_key
         APP_STORE_APPLE_ID: 6754933161
