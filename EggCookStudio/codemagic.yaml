@@ -1,0 +1,43 @@
+workflows:
+  sample-workflow:
+    name: CookStudio workflow
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: cook_studio_key
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.grouplld.BreathSphere
+      vars:
+        APP_STORE_CONNECT_KEY: cook_studio_key
+        APP_STORE_APPLE_ID: 6754933161
+        BUNDLE_ID: "com.hsstuinhappchick.CookStudio"
+        XCODE_PROJECT: "EggCookStudio.xcodeproj"
+        XCODE_SCHEME: "EggCookStudio"
+    scripts:
+      - name: Set up provisioning profiles settings on Xcode project
+        script: xcode-project use-profiles
+      - name: Increment build number
+        script: | 
+          #!/bin/sh
+          cd $CM_BUILD_DIR
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
+          agvtool new-version -all 3
+      - name: Build ipa for distribution
+        script: |
+          xcode-project build-ipa \
+            --project "$CM_BUILD_DIR/$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_KEY
+        auth: integration
+        submit_to_app_store: true
+        cancel_previous_submissions: true
+        release_type: SCHEDULED
