@@ -6,7 +6,22 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		8F5203562EC6487000F1E0F2 /* AppsFlyerLib in Frameworks */ = {isa = PBXBuildFile; productRef = 8F5203552EC6487000F1E0F2 /* AppsFlyerLib */; };
+		8F5203592EC64BA000F1E0F2 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8F5203582EC64BA000F1E0F2 /* FirebaseCore */; };
+		8F52035B2EC64BA000F1E0F2 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 8F52035A2EC64BA000F1E0F2 /* FirebaseMessaging */; };
+		8F52037B2EC65B0700F1E0F2 /* NotificationServiceExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8F5203742EC65B0700F1E0F2 /* NotificationServiceExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		8F5203832EC65B2C00F1E0F2 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 8F5203822EC65B2C00F1E0F2 /* FirebaseMessaging */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		8F5203792EC65B0700F1E0F2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8F77CAA02EA80E5600D4FB4F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8F5203732EC65B0700F1E0F2;
+			remoteInfo = NotificationServiceExtension;
+		};
 		8F77CAB72EA80E5900D4FB4F /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 8F77CAA02EA80E5600D4FB4F /* Project object */;
@@ -23,15 +38,58 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		8F5203802EC65B0700F1E0F2 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				8F52037B2EC65B0700F1E0F2 /* NotificationServiceExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		8F5203742EC65B0700F1E0F2 /* NotificationServiceExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationServiceExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		8F77CAA82EA80E5600D4FB4F /* EggCookStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EggCookStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8F77CAB62EA80E5900D4FB4F /* EggCookStudioTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EggCookStudioTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8F77CAC02EA80E5900D4FB4F /* EggCookStudioUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EggCookStudioUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		8F52037C2EC65B0700F1E0F2 /* Exceptions for "NotificationServiceExtension" folder in "NotificationServiceExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 8F5203732EC65B0700F1E0F2 /* NotificationServiceExtension */;
+		};
+		8F5203892EC65E1800F1E0F2 /* Exceptions for "EggCookStudio" folder in "EggCookStudio" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 8F77CAA72EA80E5600D4FB4F /* EggCookStudio */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		8F5203752EC65B0700F1E0F2 /* NotificationServiceExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				8F52037C2EC65B0700F1E0F2 /* Exceptions for "NotificationServiceExtension" folder in "NotificationServiceExtension" target */,
+			);
+			path = NotificationServiceExtension;
+			sourceTree = "<group>";
+		};
 		8F77CAAA2EA80E5600D4FB4F /* EggCookStudio */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				8F5203892EC65E1800F1E0F2 /* Exceptions for "EggCookStudio" folder in "EggCookStudio" target */,
+			);
 			path = EggCookStudio;
 			sourceTree = "<group>";
 		};
@@ -48,10 +106,21 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		8F5203712EC65B0700F1E0F2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8F5203832EC65B2C00F1E0F2 /* FirebaseMessaging in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		8F77CAA52EA80E5600D4FB4F /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8F52035B2EC64BA000F1E0F2 /* FirebaseMessaging in Frameworks */,
+				8F5203592EC64BA000F1E0F2 /* FirebaseCore in Frameworks */,
+				8F5203562EC6487000F1E0F2 /* AppsFlyerLib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -72,12 +141,21 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		8F5203812EC65B2C00F1E0F2 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		8F77CA9F2EA80E5600D4FB4F = {
 			isa = PBXGroup;
 			children = (
 				8F77CAAA2EA80E5600D4FB4F /* EggCookStudio */,
 				8F77CAB92EA80E5900D4FB4F /* EggCookStudioTests */,
 				8F77CAC32EA80E5900D4FB4F /* EggCookStudioUITests */,
+				8F5203752EC65B0700F1E0F2 /* NotificationServiceExtension */,
+				8F5203812EC65B2C00F1E0F2 /* Frameworks */,
 				8F77CAA92EA80E5600D4FB4F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -88,6 +166,7 @@
 				8F77CAA82EA80E5600D4FB4F /* EggCookStudio.app */,
 				8F77CAB62EA80E5900D4FB4F /* EggCookStudioTests.xctest */,
 				8F77CAC02EA80E5900D4FB4F /* EggCookStudioUITests.xctest */,
+				8F5203742EC65B0700F1E0F2 /* NotificationServiceExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -95,6 +174,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		8F5203732EC65B0700F1E0F2 /* NotificationServiceExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8F52037D2EC65B0700F1E0F2 /* Build configuration list for PBXNativeTarget "NotificationServiceExtension" */;
+			buildPhases = (
+				8F5203702EC65B0700F1E0F2 /* Sources */,
+				8F5203712EC65B0700F1E0F2 /* Frameworks */,
+				8F5203722EC65B0700F1E0F2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				8F5203752EC65B0700F1E0F2 /* NotificationServiceExtension */,
+			);
+			name = NotificationServiceExtension;
+			packageProductDependencies = (
+				8F5203822EC65B2C00F1E0F2 /* FirebaseMessaging */,
+			);
+			productName = NotificationServiceExtension;
+			productReference = 8F5203742EC65B0700F1E0F2 /* NotificationServiceExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		8F77CAA72EA80E5600D4FB4F /* EggCookStudio */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 8F77CACA2EA80E5900D4FB4F /* Build configuration list for PBXNativeTarget "EggCookStudio" */;
@@ -102,16 +204,21 @@
 				8F77CAA42EA80E5600D4FB4F /* Sources */,
 				8F77CAA52EA80E5600D4FB4F /* Frameworks */,
 				8F77CAA62EA80E5600D4FB4F /* Resources */,
+				8F5203802EC65B0700F1E0F2 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				8F52037A2EC65B0700F1E0F2 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				8F77CAAA2EA80E5600D4FB4F /* EggCookStudio */,
 			);
 			name = EggCookStudio;
 			packageProductDependencies = (
+				8F5203552EC6487000F1E0F2 /* AppsFlyerLib */,
+				8F5203582EC64BA000F1E0F2 /* FirebaseCore */,
+				8F52035A2EC64BA000F1E0F2 /* FirebaseMessaging */,
 			);
 			productName = EggCookStudio;
 			productReference = 8F77CAA82EA80E5600D4FB4F /* EggCookStudio.app */;
@@ -173,6 +280,9 @@
 				LastSwiftUpdateCheck = 1640;
 				LastUpgradeCheck = 1640;
 				TargetAttributes = {
+					8F5203732EC65B0700F1E0F2 = {
+						CreatedOnToolsVersion = 16.4;
+					};
 					8F77CAA72EA80E5600D4FB4F = {
 						CreatedOnToolsVersion = 16.4;
 					};
@@ -195,6 +305,10 @@
 			);
 			mainGroup = 8F77CA9F2EA80E5600D4FB4F;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				8F5203542EC6487000F1E0F2 /* XCRemoteSwiftPackageReference "AppsFlyerFramework" */,
+				8F5203572EC64BA000F1E0F2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8F77CAA92EA80E5600D4FB4F /* Products */;
 			projectDirPath = "";
@@ -203,11 +317,19 @@
 				8F77CAA72EA80E5600D4FB4F /* EggCookStudio */,
 				8F77CAB52EA80E5900D4FB4F /* EggCookStudioTests */,
 				8F77CABF2EA80E5900D4FB4F /* EggCookStudioUITests */,
+				8F5203732EC65B0700F1E0F2 /* NotificationServiceExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		8F5203722EC65B0700F1E0F2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		8F77CAA62EA80E5600D4FB4F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -232,6 +354,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		8F5203702EC65B0700F1E0F2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		8F77CAA42EA80E5600D4FB4F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -256,6 +385,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		8F52037A2EC65B0700F1E0F2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8F5203732EC65B0700F1E0F2 /* NotificationServiceExtension */;
+			targetProxy = 8F5203792EC65B0700F1E0F2 /* PBXContainerItemProxy */;
+		};
 		8F77CAB82EA80E5900D4FB4F /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 8F77CAA72EA80E5600D4FB4F /* EggCookStudio */;
@@ -269,6 +403,67 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		8F52037E2EC65B0700F1E0F2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NotificationServiceExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = NotificationServiceExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hsstuinhappchick.CookStudio.NotificationServiceExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		8F52037F2EC65B0700F1E0F2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NotificationServiceExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = NotificationServiceExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hsstuinhappchick.CookStudio.NotificationServiceExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		8F77CAC82EA80E5900D4FB4F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -393,7 +588,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = EggCookStudio/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cook Studio";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Allow to use your camera in app Cook Studio.";
+				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Cook Studio may use your device identifier and limited usage data to personalize recipe suggestions, measure app performance, and deliver cooking tips or offers relevant to your culinary interests. With your permission, this data may also help us understand which recipes or features users enjoy most, so we can continue improving your cooking experience. Your information is handled securely, never sold, and used strictly for analytics, personalization, and providing relevant content in accordance with our Privacy Policy.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -432,7 +630,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = EggCookStudio/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cook Studio";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Allow to use your camera in app Cook Studio.";
+				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Cook Studio may use your device identifier and limited usage data to personalize recipe suggestions, measure app performance, and deliver cooking tips or offers relevant to your culinary interests. With your permission, this data may also help us understand which recipes or features users enjoy most, so we can continue improving your cooking experience. Your information is handled securely, never sold, and used strictly for analytics, personalization, and providing relevant content in accordance with our Privacy Policy.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -550,6 +751,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		8F52037D2EC65B0700F1E0F2 /* Build configuration list for PBXNativeTarget "NotificationServiceExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8F52037E2EC65B0700F1E0F2 /* Debug */,
+				8F52037F2EC65B0700F1E0F2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		8F77CAA32EA80E5600D4FB4F /* Build configuration list for PBXProject "EggCookStudio" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -587,6 +797,48 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		8F5203542EC6487000F1E0F2 /* XCRemoteSwiftPackageReference "AppsFlyerFramework" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AppsFlyerSDK/AppsFlyerFramework";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.17.7;
+			};
+		};
+		8F5203572EC64BA000F1E0F2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.5.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8F5203552EC6487000F1E0F2 /* AppsFlyerLib */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8F5203542EC6487000F1E0F2 /* XCRemoteSwiftPackageReference "AppsFlyerFramework" */;
+			productName = AppsFlyerLib;
+		};
+		8F5203582EC64BA000F1E0F2 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8F5203572EC64BA000F1E0F2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		8F52035A2EC64BA000F1E0F2 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8F5203572EC64BA000F1E0F2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
+		8F5203822EC65B2C00F1E0F2 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8F5203572EC64BA000F1E0F2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 8F77CAA02EA80E5600D4FB4F /* Project object */;
 }

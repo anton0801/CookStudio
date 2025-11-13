@@ -1,10 +1,3 @@
-//
-//  EggCookStudioTests.swift
-//  EggCookStudioTests
-//
-//  Created by Anton Danilov on 21/10/25.
-//
-
 import Testing
 
 struct EggCookStudioTests {

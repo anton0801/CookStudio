@@ -1,10 +1,3 @@
-//
-//  EggCookStudioUITests.swift
-//  EggCookStudioUITests
-//
-//  Created by Anton Danilov on 21/10/25.
-//
-
 import XCTest
 
 final class EggCookStudioUITests: XCTestCase {

