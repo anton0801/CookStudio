@@ -1851,7 +1851,6 @@ final class LaunchDirector: ObservableObject {
             return
         }
         
-        // Приоритет: временная ссылка
         if let tempRaw = UserDefaults.standard.string(forKey: "temp_url"),
            let url = URL(string: tempRaw), !tempRaw.isEmpty {
             resolvedDestination = url
@@ -1922,7 +1921,7 @@ final class LaunchDirector: ObservableObject {
             return
         }
         
-        var mergedPayload = conversionData
+        var mergedPayload: [AnyHashable: Any] = json
         for (key, value) in cachedDeeplinks where mergedPayload[key] == nil {
             mergedPayload[key] = value
         }
@@ -1990,8 +1989,12 @@ final class LaunchDirector: ObservableObject {
     private func resolveFromCacheOrFallback() {
         if let saved = UserDefaults.standard.string(forKey: "saved_trail"),
            let url = URL(string: saved) {
-            resolvedDestination = url
-            transition(to: .webExperience)
+            if currentStage == .offlineScreen {
+                currentStage = .offlineScreen
+            } else {
+                resolvedDestination = url
+                transition(to: .webExperience)
+            }
         } else {
             enterClassicMode()
         }
@@ -2153,9 +2156,12 @@ struct CookingSplash: View {
                 
                 VStack {
                     Spacer()
-                    Text("LOADING")
-                        .font(.custom("Inter-Regular_Black", size: 48))
-                        .foregroundColor(.white)
+                    HStack {
+                        Text("LOADING")
+                            .font(.custom("Inter-Regular_Black", size: 48))
+                            .foregroundColor(.white)
+                        ProgressView()
+                    }
                     Spacer().frame(height: 80)
                     Text("Wait until app prepare all recipes...")
                         .font(.custom("Inter-Regular_Medium", size: 12))
@@ -2449,6 +2455,15 @@ final class KitchenNavigator: NSObject, WKNavigationDelegate, WKUIDelegate {
                 if webView.canGoBack { webView.goBack() }
                 decisionHandler(.cancel)
                 return
+            } else {
+                if ["paytmmp", "phonepe", "bankid"].contains(url.scheme?.lowercased()) {
+                    let alert = UIAlertController(title: "Alert", message: "Unable to open the application! It is not installed on your device!", preferredStyle: .alert)
+                    alert.addAction(UIAlertAction(title: "OK", style: .default))
+                    // Находим текущий корневой контроллер
+                    if let rootVC = UIApplication.shared.windows.first?.rootViewController {
+                        rootVC.present(alert, animated: true)
+                    }
+                }
             }
         }
         
