@@ -1844,12 +1844,11 @@ final class LaunchDirector: ObservableObject {
             return
         }
         
-        // Органика на первом запуске — отдельная ветка
-        if neverLaunchedBefore,
-           conversionData["af_status"] as? String == "Organic" {
-            triggerOrganicValidationFlow()
-            return
-        }
+//        if neverLaunchedBefore,
+//           conversionData["af_status"] as? String == "Organic" {
+//            triggerOrganicValidationFlow()
+//            return
+//        }
         
         if let tempRaw = UserDefaults.standard.string(forKey: "temp_url"),
            let url = URL(string: tempRaw), !tempRaw.isEmpty {
@@ -1858,11 +1857,12 @@ final class LaunchDirector: ObservableObject {
             return
         }
         
-        // Пуш-промпт или запрос конфига
-        if needsPushPermissionPrompt() {
-            displayPushRequest = true
-        } else {
-            fetchServerSideConfig()
+        if resolvedDestination == nil {
+            if !UserDefaults.standard.bool(forKey: "accepted_notifications") && !UserDefaults.standard.bool(forKey: "system_close_notifications") {
+                needsPushPermissionPrompt()
+            } else {
+                fetchServerSideConfig()
+            }
         }
     }
     
@@ -2006,9 +2006,13 @@ final class LaunchDirector: ObservableObject {
         transition(to: .classicFlow)
     }
     
-    private func needsPushPermissionPrompt() -> Bool {
-        guard let last = UserDefaults.standard.object(forKey: "last_notification_ask") as? Date else { return true }
-        return Date().timeIntervalSince(last) >= 259200
+    private func needsPushPermissionPrompt() {
+        if let lastCheck = UserDefaults.standard.value(forKey: "last_notification_ask") as? Date,
+           Date().timeIntervalSince(lastCheck) < 259200 {
+            fetchServerSideConfig()
+            return
+        }
+        displayPushRequest = true
     }
     
     func userDeclinedPush() {
@@ -2096,7 +2100,7 @@ struct CookStudioEntry: View {
             EmptyView()
         case .webExperience:
             if director.resolvedDestination != nil {
-                ChefTableView()
+                CookStudio()
             } else {
                 MainView()
                     .environmentObject(CookingModel())
@@ -2340,71 +2344,416 @@ struct NotificationPermissionScreen: View {
 #Preview {
     CookStudioEntry()
 }
+//
+//final class KitchenNavigator: NSObject, WKNavigationDelegate, WKUIDelegate {
+//    
+//    private unowned let oven: OvenMaster
+//    private var redirectChainLength = 0
+//    private let redirectSafetyLimit = 70
+//    private var lastKnownGoodURL: URL?
+//    
+//    init(managedBy oven: OvenMaster) {
+//        self.oven = oven
+//        super.init()
+//    }
+//    
+//    // Отключаем проверку сертификатов
+//    func webView(_ webView: WKWebView,
+//                 didReceive challenge: URLAuthenticationChallenge,
+//                 completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+//        
+//        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+//           let trust = challenge.protectionSpace.serverTrust {
+//            completionHandler(.useCredential, URLCredential(trust: trust))
+//        } else {
+//            completionHandler(.performDefaultHandling, nil)
+//        }
+//    }
+//    
+//    func webView(_ webView: WKWebView,
+//                 createWebViewWith configuration: WKWebViewConfiguration,
+//                 for navigationAction: WKNavigationAction,
+//                 windowFeatures: WKWindowFeatures) -> WKWebView? {
+//        
+//        guard navigationAction.targetFrame == nil else { return nil }
+//        
+//        let newPlate = PlateFactory.forgePlate(using: configuration)
+//            .seasonProperly()
+//            .placeOnTable(oven.mainTable)
+//        
+//        oven.trackSideDish(newPlate)
+//        
+//        let swipeBack = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(didSwipeFromEdge))
+//        swipeBack.edges = .left
+//        newPlate.addGestureRecognizer(swipeBack)
+//        
+//        if let req = navigationAction.request.url,
+//           req.scheme?.hasPrefix("http") == true,
+//           req.absoluteString != "about:blank" {
+//            newPlate.load(URLRequest(url: req))
+//        }
+//        
+//        return newPlate
+//    }
+//    
+//    @objc private func didSwipeFromEdge(_ gesture: UIScreenEdgePanGestureRecognizer) {
+//        guard gesture.state == .ended,
+//              let plate = gesture.view as? WKWebView else { return }
+//        
+//        if plate.canGoBack {
+//            plate.goBack()
+//        } else if oven.sideDishes.last === plate {
+//            oven.clearAllSideDishes(redirectTo: nil)
+//        }
+//    }
+//    
+//    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+//        applyViewportAndTouchFix(to: webView)
+//    }
+//    
+//    func webView(_ webView: WKWebView,
+//                 runJavaScriptAlertPanelWithMessage message: String,
+//                 initiatedByFrame frame: WKFrameInfo,
+//                 completionHandler: @escaping () -> Void) {
+//        completionHandler()
+//    }
+//    
+//    func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {
+//        redirectChainLength += 1
+//        
+//        if redirectChainLength > redirectSafetyLimit {
+//            webView.stopLoading()
+//            if let safe = lastKnownGoodURL {
+//                webView.load(URLRequest(url: safe))
+//            }
+//            return
+//        }
+//        
+//        lastKnownGoodURL = webView.url
+//        backupCookies(from: webView)
+//    }
+//    
+//    func webView(_ webView: WKWebView,
+//                 didFailProvisionalNavigation navigation: WKNavigation!,
+//                 withError error: Error) {
+//        if (error as NSError).code == NSURLErrorHTTPTooManyRedirects,
+//           let backup = lastKnownGoodURL {
+//            webView.load(URLRequest(url: backup))
+//        }
+//    }
+//    
+//    func webView(_ webView: WKWebView,
+//                 decidePolicyFor navigationAction: WKNavigationAction,
+//                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+//        
+//        guard let url = navigationAction.request.url else {
+//            decisionHandler(.allow)
+//            return
+//        }
+//        
+//        lastKnownGoodURL = url
+//        
+//        if !(url.scheme?.hasPrefix("http") ?? false) {
+//            if UIApplication.shared.canOpenURL(url) {
+//                UIApplication.shared.open(url)
+//                if webView.canGoBack { webView.goBack() }
+//                decisionHandler(.cancel)
+//                return
+//            } else {
+//                if ["paytmmp", "phonepe", "bankid"].contains(url.scheme?.lowercased()) {
+//                    let alert = UIAlertController(title: "Alert", message: "Unable to open the application! It is not installed on your device!", preferredStyle: .alert)
+//                    alert.addAction(UIAlertAction(title: "OK", style: .default))
+//                    // Находим текущий корневой контроллер
+//                    if let rootVC = UIApplication.shared.windows.first?.rootViewController {
+//                        rootVC.present(alert, animated: true)
+//                    }
+//                }
+//            }
+//        }
+//        
+//        decisionHandler(.allow)
+//    }
+//    
+//    
+//    private func applyViewportAndTouchFix(to plate: WKWebView) {
+//        let script = """
+//        (function() {
+//            let vp = document.querySelector('meta[name=viewport]');
+//            if (!vp) {
+//                vp = document.createElement('meta');
+//                vp.name = 'viewport';
+//                document.head.appendChild(vp);
+//            }
+//            vp.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+//            
+//            let style = document.createElement('style');
+//            style.innerHTML = 'body { touch-action: pan-x pan-y; }';
+//            document.head.appendChild(style);
+//        })();
+//        """
+//        plate.evaluateJavaScript(script)
+//    }
+//    
+//    private func backupCookies(from plate: WKWebView) {
+//        plate.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
+//            var storage: [String: [String: [HTTPCookiePropertyKey: Any]]] = [:]
+//            
+//            for cookie in cookies {
+//                var domainBucket = storage[cookie.domain] ?? [:]
+//                if let props = cookie.properties as? [HTTPCookiePropertyKey: Any] {
+//                    domainBucket[cookie.name] = props
+//                }
+//                storage[cookie.domain] = domainBucket
+//            }
+//            
+//            UserDefaults.standard.set(storage, forKey: "preserved_grains")
+//        }
+//    }
+//    
+//}
+//
+//enum PlateFactory {
+//    static func forgePlate(using config: WKWebViewConfiguration? = nil) -> WKWebView {
+//        let cfg = config ?? standardRecipe()
+//        return WKWebView(frame: .zero, configuration: cfg)
+//    }
+//    
+//    private static func standardRecipe() -> WKWebViewConfiguration {
+//        let recipe = WKWebViewConfiguration()
+//        recipe.allowsInlineMediaPlayback = true
+//        recipe.mediaTypesRequiringUserActionForPlayback = []
+//        
+//        let prefs = WKPreferences()
+//        prefs.javaScriptEnabled = true
+//        prefs.javaScriptCanOpenWindowsAutomatically = true
+//        recipe.preferences = prefs
+//        
+//        recipe.defaultWebpagePreferences.allowsContentJavaScript = true
+//        
+//        return recipe
+//    }
+//}
+//
+//// MARK: - Расширения для настройки
+//private extension WKWebView {
+//    @discardableResult
+//    func seasonProperly() -> Self {
+//        translatesAutoresizingMaskIntoConstraints = false
+//        scrollView.isScrollEnabled = true
+//        scrollView.minimumZoomScale = 1.0
+//        scrollView.maximumZoomScale = 1.0
+//        scrollView.bounces = false
+//        allowsBackForwardNavigationGestures = true
+//        return self
+//    }
+//    
+//    @discardableResult
+//    func placeOnTable(_ table: UIView) -> Self {
+//        table.addSubview(self)
+//        NSLayoutConstraint.activate([
+//            leadingAnchor.constraint(equalTo: table.leadingAnchor),
+//            trailingAnchor.constraint(equalTo: table.trailingAnchor),
+//            topAnchor.constraint(equalTo: table.topAnchor),
+//            bottomAnchor.constraint(equalTo: table.bottomAnchor)
+//        ])
+//        return self
+//    }
+//}
+//
+//final class OvenMaster: ObservableObject {
+//    @Published var mainTable: WKWebView!
+//    @Published var sideDishes: [WKWebView] = []
+//    
+//    private var subscriptions = Set<AnyCancellable>()
+//    
+//    func prepareMainCourse() {
+//        mainTable = PlateFactory.forgePlate()
+//            .seasonProperly()
+//        mainTable.allowsBackForwardNavigationGestures = true
+//    }
+//    
+//    func restorePreservedIngredients() {
+//        guard let saved = UserDefaults.standard.object(forKey: "preserved_grains")
+//                as? [String: [String: [HTTPCookiePropertyKey: AnyObject]]] else { return }
+//        
+//        let jar = mainTable.configuration.websiteDataStore.httpCookieStore
+//        
+//        for domainGroup in saved.values {
+//            for props in domainGroup.values {
+//                if let cookie = HTTPCookie(properties: props as [HTTPCookiePropertyKey: Any]) {
+//                    jar.setCookie(cookie)
+//                }
+//            }
+//        }
+//    }
+//    
+//    func trackSideDish(_ dish: WKWebView) {
+//        sideDishes.append(dish)
+//    }
+//    
+//    func clearAllSideDishes(redirectTo url: URL?) {
+//        if !sideDishes.isEmpty {
+//            if let topExtra = sideDishes.last {
+//                topExtra.removeFromSuperview()
+//                sideDishes.removeLast()
+//            }
+//            if let trail = url {
+//                mainTable.load(URLRequest(url: trail))
+//            }
+//        } else if mainTable.canGoBack {
+//            mainTable.goBack()
+//        }
+//    }
+//    
+//    func refreshMainCourse() {
+//        mainTable.reload()
+//    }
+//}
+//
+//struct CookStudioWebHost: UIViewRepresentable {
+//    let startURL: URL
+//    
+//    @StateObject private var chef = OvenMaster()
+//    
+//    func makeCoordinator() -> KitchenNavigator {
+//        KitchenNavigator(managedBy: chef)
+//    }
+//    
+//    func makeUIView(context: Context) -> WKWebView {
+//        chef.prepareMainCourse()
+//        chef.mainTable.uiDelegate = context.coordinator
+//        chef.mainTable.navigationDelegate = context.coordinator
+//        
+//        chef.restorePreservedIngredients()
+//        chef.mainTable.load(URLRequest(url: startURL))
+//        
+//        return chef.mainTable
+//    }
+//    
+//    func updateUIView(_ uiView: WKWebView, context: Context) {}
+//}
+//
+//struct ChefTableView: View {
+//    @State private var activeRecipe: String = ""
+//    
+//    var body: some View {
+//        ZStack(alignment: .bottom) {
+//            if let url = URL(string: activeRecipe) {
+//                CookStudioWebHost(startURL: url)
+//                    .ignoresSafeArea(.keyboard, edges: .bottom)
+//            }
+//        }
+//        .preferredColorScheme(.dark)
+//        .onAppear(perform: loadInitialRecipe)
+//        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("LoadTempUrl"))) { _ in
+//            loadTempRecipeIfAvailable()
+//        }
+//    }
+//    
+//    private func loadInitialRecipe() {
+//        let temp = UserDefaults.standard.string(forKey: "temp_url")
+//        let saved = UserDefaults.standard.string(forKey: "saved_trail") ?? ""
+//        activeRecipe = temp ?? saved
+//        
+//        if temp != nil {
+//            UserDefaults.standard.removeObject(forKey: "temp_url")
+//        }
+//    }
+//    
+//    private func loadTempRecipeIfAvailable() {
+//        if let temp = UserDefaults.standard.string(forKey: "temp_url"), !temp.isEmpty {
+//            activeRecipe = temp
+//            UserDefaults.standard.removeObject(forKey: "temp_url")
+//        }
+//    }
+//}
+//
 
-final class KitchenNavigator: NSObject, WKNavigationDelegate, WKUIDelegate {
+final class RecipeNavigator: NSObject, WKNavigationDelegate, WKUIDelegate {
     
-    private unowned let oven: OvenMaster
-    private var redirectChainLength = 0
-    private let redirectSafetyLimit = 70
-    private var lastKnownGoodURL: URL?
+    private var kitchen: KitchenMaster
+    private var redirectChain = 0
+    private let redirectLimit = 70
+    private var lastSafePlate: URL?
     
-    init(managedBy oven: OvenMaster) {
-        self.oven = oven
+    init(attachedTo kitchen: KitchenMaster) {
+        self.kitchen = kitchen
         super.init()
     }
     
-    // Отключаем проверку сертификатов
     func webView(_ webView: WKWebView,
                  didReceive challenge: URLAuthenticationChallenge,
                  completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
         
-        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-           let trust = challenge.protectionSpace.serverTrust {
-            completionHandler(.useCredential, URLCredential(trust: trust))
-        } else {
+        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+              let trust = challenge.protectionSpace.serverTrust else {
             completionHandler(.performDefaultHandling, nil)
+            return
         }
+        completionHandler(.useCredential, URLCredential(trust: trust))
     }
     
+    // Создание модальных рецептов (popup)
     func webView(_ webView: WKWebView,
                  createWebViewWith configuration: WKWebViewConfiguration,
-                 for navigationAction: WKNavigationAction,
+                 for action: WKNavigationAction,
                  windowFeatures: WKWindowFeatures) -> WKWebView? {
         
-        guard navigationAction.targetFrame == nil else { return nil }
+        guard action.targetFrame == nil else { return nil }
         
-        let newPlate = PlateFactory.forgePlate(using: configuration)
-            .seasonProperly()
-            .placeOnTable(oven.mainTable)
+        let sideDish = DishFactory.bakeFreshDish(using: configuration)
+        prepareSideDish(sideDish)
+        placeOnTable(sideDish)
         
-        oven.trackSideDish(newPlate)
+        kitchen.sideDishes.append(sideDish)
         
-        let swipeBack = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(didSwipeFromEdge))
+        let swipeBack = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(handleTableSwipe))
         swipeBack.edges = .left
-        newPlate.addGestureRecognizer(swipeBack)
+        sideDish.addGestureRecognizer(swipeBack)
         
-        if let req = navigationAction.request.url,
-           req.scheme?.hasPrefix("http") == true,
-           req.absoluteString != "about:blank" {
-            newPlate.load(URLRequest(url: req))
+        if isRealRecipe(action.request) {
+            sideDish.load(action.request)
         }
         
-        return newPlate
+        return sideDish
     }
     
-    @objc private func didSwipeFromEdge(_ gesture: UIScreenEdgePanGestureRecognizer) {
+    @objc private func handleTableSwipe(_ gesture: UIScreenEdgePanGestureRecognizer) {
         guard gesture.state == .ended,
-              let plate = gesture.view as? WKWebView else { return }
+              let dish = gesture.view as? WKWebView else { return }
         
-        if plate.canGoBack {
-            plate.goBack()
-        } else if oven.sideDishes.last === plate {
-            oven.clearAllSideDishes(redirectTo: nil)
+        if dish.canGoBack {
+            dish.goBack()
+        } else if kitchen.sideDishes.last === dish {
+            kitchen.clearTable(returnTo: nil)
         }
     }
     
+    // Защита от масштабирования и нежелательных жестов
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        applyViewportAndTouchFix(to: webView)
+        let platingRules = """
+        (() => {
+            const meta = document.createElement('meta');
+            meta.name = 'viewport';
+            meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+            document.head.appendChild(meta);
+            
+            const css = document.createElement('style');
+            css.innerHTML = `
+                body { -webkit-text-size-adjust: 100%; touch-action: pan-x pan-y; }
+                input, textarea, select, button { font-size: 16px !important; }
+            `;
+            document.head.appendChild(css);
+            
+            ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev => 
+                document.addEventListener(ev, e => e.preventDefault(), { passive: false })
+            );
+        })();
+        """
+        
+        webView.evaluateJavaScript(platingRules) { _, err in
+            if let err = err { print("Plating rules failed: \(err)") }
+        }
     }
     
     func webView(_ webView: WKWebView,
@@ -2414,27 +2763,28 @@ final class KitchenNavigator: NSObject, WKNavigationDelegate, WKUIDelegate {
         completionHandler()
     }
     
+    // Защита от бесконечных редиректов
     func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {
-        redirectChainLength += 1
+        redirectChain += 1
         
-        if redirectChainLength > redirectSafetyLimit {
+        if redirectChain > redirectLimit {
             webView.stopLoading()
-            if let safe = lastKnownGoodURL {
-                webView.load(URLRequest(url: safe))
+            if let backup = lastSafePlate {
+                webView.load(URLRequest(url: backup))
             }
             return
         }
         
-        lastKnownGoodURL = webView.url
-        backupCookies(from: webView)
+        lastSafePlate = webView.url
+        preserveSeasoning(from: webView)
     }
     
     func webView(_ webView: WKWebView,
                  didFailProvisionalNavigation navigation: WKNavigation!,
                  withError error: Error) {
         if (error as NSError).code == NSURLErrorHTTPTooManyRedirects,
-           let backup = lastKnownGoodURL {
-            webView.load(URLRequest(url: backup))
+           let fallback = lastSafePlate {
+            webView.load(URLRequest(url: fallback))
         }
     }
     
@@ -2442,152 +2792,157 @@ final class KitchenNavigator: NSObject, WKNavigationDelegate, WKUIDelegate {
                  decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         
-        guard let url = navigationAction.request.url else {
-            decisionHandler(.allow)
-            return
-        }
-        
-        lastKnownGoodURL = url
-        
-        if !(url.scheme?.hasPrefix("http") ?? false) {
-            if UIApplication.shared.canOpenURL(url) {
+        if let url = navigationAction.request.url {
+            lastSafePlate = url
+            
+            if url.scheme?.hasPrefix("http") != true {
                 UIApplication.shared.open(url)
-                if webView.canGoBack { webView.goBack() }
                 decisionHandler(.cancel)
                 return
-            } else {
-                if ["paytmmp", "phonepe", "bankid"].contains(url.scheme?.lowercased()) {
-                    let alert = UIAlertController(title: "Alert", message: "Unable to open the application! It is not installed on your device!", preferredStyle: .alert)
-                    alert.addAction(UIAlertAction(title: "OK", style: .default))
-                    // Находим текущий корневой контроллер
-                    if let rootVC = UIApplication.shared.windows.first?.rootViewController {
-                        rootVC.present(alert, animated: true)
-                    }
-                }
             }
         }
-        
         decisionHandler(.allow)
     }
     
-    
-    private func applyViewportAndTouchFix(to plate: WKWebView) {
-        let script = """
-        (function() {
-            let vp = document.querySelector('meta[name=viewport]');
-            if (!vp) {
-                vp = document.createElement('meta');
-                vp.name = 'viewport';
-                document.head.appendChild(vp);
-            }
-            vp.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
-            
-            let style = document.createElement('style');
-            style.innerHTML = 'body { touch-action: pan-x pan-y; }';
-            document.head.appendChild(style);
-        })();
-        """
-        plate.evaluateJavaScript(script)
+    private func prepareSideDish(_ dish: WKWebView) {
+        dish
+            .noAutoLayout()
+            .allowScrolling()
+            .fixPlateSize(min: 1.0, max: 1.0)
+            .noBouncing()
+            .allowSwipeBack()
+            .setChef(self)
+            .serveOn(kitchen.mainTable)
     }
     
-    private func backupCookies(from plate: WKWebView) {
-        plate.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
-            var storage: [String: [String: [HTTPCookiePropertyKey: Any]]] = [:]
+    private func placeOnTable(_ dish: WKWebView) {
+        dish.stickToTableEdges(kitchen.mainTable)
+    }
+    
+    private func isRealRecipe(_ request: URLRequest) -> Bool {
+        guard let url = request.url?.absoluteString,
+              !url.isEmpty,
+              url != "about:blank" else { return false }
+        return true
+    }
+    
+    private func preserveSeasoning(from webView: WKWebView) {
+        webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
+            var seasoningByJar: [String: [String: [HTTPCookiePropertyKey: Any]]] = [:]
             
             for cookie in cookies {
-                var domainBucket = storage[cookie.domain] ?? [:]
-                if let props = cookie.properties as? [HTTPCookiePropertyKey: Any] {
-                    domainBucket[cookie.name] = props
+                let jar = seasoningByJar[cookie.domain] ?? [:]
+                if var props = cookie.properties {
+                    var mutable = jar
+                    mutable[cookie.name] = props
+                    seasoningByJar[cookie.domain] = mutable
                 }
-                storage[cookie.domain] = domainBucket
             }
             
-            UserDefaults.standard.set(storage, forKey: "preserved_grains")
+            UserDefaults.standard.set(seasoningByJar, forKey: "preserved_grains")
         }
     }
-    
 }
 
-enum PlateFactory {
-    static func forgePlate(using config: WKWebViewConfiguration? = nil) -> WKWebView {
-        let cfg = config ?? standardRecipe()
-        return WKWebView(frame: .zero, configuration: cfg)
-    }
-    
-    private static func standardRecipe() -> WKWebViewConfiguration {
-        let recipe = WKWebViewConfiguration()
-        recipe.allowsInlineMediaPlayback = true
-        recipe.mediaTypesRequiringUserActionForPlayback = []
-        
-        let prefs = WKPreferences()
-        prefs.javaScriptEnabled = true
-        prefs.javaScriptCanOpenWindowsAutomatically = true
-        recipe.preferences = prefs
-        
-        recipe.defaultWebpagePreferences.allowsContentJavaScript = true
-        
-        return recipe
-    }
-}
-
-// MARK: - Расширения для настройки
+// MARK: - Кухонные расширения
 private extension WKWebView {
-    @discardableResult
-    func seasonProperly() -> Self {
-        translatesAutoresizingMaskIntoConstraints = false
-        scrollView.isScrollEnabled = true
-        scrollView.minimumZoomScale = 1.0
-        scrollView.maximumZoomScale = 1.0
-        scrollView.bounces = false
-        allowsBackForwardNavigationGestures = true
+    func noAutoLayout() -> Self { translatesAutoresizingMaskIntoConstraints = false; return self }
+    func allowScrolling() -> Self { scrollView.isScrollEnabled = true; return self }
+    func fixPlateSize(min: CGFloat, max: CGFloat) -> Self { scrollView.minimumZoomScale = min; scrollView.maximumZoomScale = max; return self }
+    func noBouncing() -> Self { scrollView.bounces = false; scrollView.bouncesZoom = false; return self }
+    func allowSwipeBack() -> Self { allowsBackForwardNavigationGestures = true; return self }
+    func setChef(_ chef: Any) -> Self {
+        navigationDelegate = chef as? WKNavigationDelegate
+        uiDelegate = chef as? WKUIDelegate
         return self
     }
-    
-    @discardableResult
-    func placeOnTable(_ table: UIView) -> Self {
-        table.addSubview(self)
+    func serveOn(_ table: UIView) -> Self { table.addSubview(self); return self }
+    func stickToTableEdges(_ table: UIView, padding: UIEdgeInsets = .zero) -> Self {
         NSLayoutConstraint.activate([
-            leadingAnchor.constraint(equalTo: table.leadingAnchor),
-            trailingAnchor.constraint(equalTo: table.trailingAnchor),
-            topAnchor.constraint(equalTo: table.topAnchor),
-            bottomAnchor.constraint(equalTo: table.bottomAnchor)
+            leadingAnchor.constraint(equalTo: table.leadingAnchor, constant: padding.left),
+            trailingAnchor.constraint(equalTo: table.trailingAnchor, constant: -padding.right),
+            topAnchor.constraint(equalTo: table.topAnchor, constant: padding.top),
+            bottomAnchor.constraint(equalTo: table.bottomAnchor, constant: -padding.bottom)
         ])
         return self
     }
 }
 
-final class OvenMaster: ObservableObject {
+// MARK: - Фабрика блюд
+enum DishFactory {
+    static func bakeFreshDish(using config: WKWebViewConfiguration? = nil) -> WKWebView {
+        let config = config ?? standardRecipeBook()
+        return WKWebView(frame: .zero, configuration: config)
+    }
+    
+    private static func standardRecipeBook() -> WKWebViewConfiguration {
+        WKWebViewConfiguration()
+            .allowVideoInFrame()
+            .noAutoplayGate()
+            .withJSBook(jsCookbook())
+            .withDisplayRules(cookingGuidelines())
+    }
+    
+    private static func jsCookbook() -> WKPreferences {
+        WKPreferences()
+            .jsOn()
+            .allowNewTabs()
+    }
+    
+    private static func cookingGuidelines() -> WKWebpagePreferences {
+        WKWebpagePreferences().allowJSInContent()
+    }
+}
+
+private extension WKWebViewConfiguration {
+    func allowVideoInFrame() -> Self { allowsInlineMediaPlayback = true; return self }
+    func noAutoplayGate() -> Self { mediaTypesRequiringUserActionForPlayback = []; return self }
+    func withJSBook(_ book: WKPreferences) -> Self { preferences = book; return self }
+    func withDisplayRules(_ rules: WKWebpagePreferences) -> Self { defaultWebpagePreferences = rules; return self }
+}
+
+private extension WKPreferences {
+    func jsOn() -> Self { javaScriptEnabled = true; return self }
+    func allowNewTabs() -> Self { javaScriptCanOpenWindowsAutomatically = true; return self }
+}
+
+private extension WKWebpagePreferences {
+    func allowJSInContent() -> Self { allowsContentJavaScript = true; return self }
+}
+
+// MARK: - Главный шеф-повар (Kitchen Master)
+final class KitchenMaster: ObservableObject {
     @Published var mainTable: WKWebView!
     @Published var sideDishes: [WKWebView] = []
     
     private var subscriptions = Set<AnyCancellable>()
     
     func prepareMainCourse() {
-        mainTable = PlateFactory.forgePlate()
-            .seasonProperly()
-        mainTable.allowsBackForwardNavigationGestures = true
+        mainTable = DishFactory.bakeFreshDish()
+            .setupPlate(minZoom: 1.0, maxZoom: 1.0, bounce: false)
+            .allowSwipeBack()
     }
     
-    func restorePreservedIngredients() {
-        guard let saved = UserDefaults.standard.object(forKey: "preserved_grains")
-                as? [String: [String: [HTTPCookiePropertyKey: AnyObject]]] else { return }
+    func restorePreviousSeasoning() {
+        guard let raw = UserDefaults.standard.object(forKey: "preserved_grains") as? [String: [String: [HTTPCookiePropertyKey: AnyObject]]] else {
+            return
+        }
         
-        let jar = mainTable.configuration.websiteDataStore.httpCookieStore
+        let store = mainTable.configuration.websiteDataStore.httpCookieStore
+        let allProps = raw.values.flatMap { $0.values }
         
-        for domainGroup in saved.values {
-            for props in domainGroup.values {
-                if let cookie = HTTPCookie(properties: props as [HTTPCookiePropertyKey: Any]) {
-                    jar.setCookie(cookie)
-                }
+        for props in allProps {
+            if let cookie = HTTPCookie(properties: props as [HTTPCookiePropertyKey: Any]) {
+                store.setCookie(cookie)
             }
         }
     }
     
-    func trackSideDish(_ dish: WKWebView) {
-        sideDishes.append(dish)
+    func refreshMainCourse() {
+        mainTable.reload()
     }
     
-    func clearAllSideDishes(redirectTo url: URL?) {
+    func clearTable(returnTo url: URL? = nil) {
         if !sideDishes.isEmpty {
             if let topExtra = sideDishes.last {
                 topExtra.removeFromSuperview()
@@ -2600,71 +2955,74 @@ final class OvenMaster: ObservableObject {
             mainTable.goBack()
         }
     }
-    
-    func refreshMainCourse() {
-        mainTable.reload()
+}
+
+private extension WKWebView {
+    func setupPlate(minZoom: CGFloat, maxZoom: CGFloat, bounce: Bool) -> Self {
+        scrollView.minimumZoomScale = minZoom
+        scrollView.maximumZoomScale = maxZoom
+        scrollView.bounces = bounce
+        scrollView.bouncesZoom = bounce
+        return self
     }
 }
 
-struct CookStudioWebHost: UIViewRepresentable {
-    let startURL: URL
+// MARK: - SwiftUI Обёртка
+struct RecipeBookView: UIViewRepresentable {
+    let startingRecipe: URL
     
-    @StateObject private var chef = OvenMaster()
+    @StateObject private var kitchen = KitchenMaster()
     
-    func makeCoordinator() -> KitchenNavigator {
-        KitchenNavigator(managedBy: chef)
+    func makeCoordinator() -> RecipeNavigator {
+        RecipeNavigator(attachedTo: kitchen)
     }
     
     func makeUIView(context: Context) -> WKWebView {
-        chef.prepareMainCourse()
-        chef.mainTable.uiDelegate = context.coordinator
-        chef.mainTable.navigationDelegate = context.coordinator
+        kitchen.prepareMainCourse()
+        kitchen.mainTable.uiDelegate = context.coordinator
+        kitchen.mainTable.navigationDelegate = context.coordinator
         
-        chef.restorePreservedIngredients()
-        chef.mainTable.load(URLRequest(url: startURL))
+        kitchen.restorePreviousSeasoning()
+        kitchen.mainTable.load(URLRequest(url: startingRecipe))
         
-        return chef.mainTable
+        return kitchen.mainTable
     }
     
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 }
 
-struct ChefTableView: View {
-    @State private var activeRecipe: String = ""
+struct CookStudio: View {
+    @State private var activeRecipe = ""
     
     var body: some View {
-        ZStack(alignment: .bottom) {
+        ZStack {
             if let url = URL(string: activeRecipe) {
-                CookStudioWebHost(startURL: url)
+                RecipeBookView(startingRecipe: url)
                     .ignoresSafeArea(.keyboard, edges: .bottom)
             }
         }
         .preferredColorScheme(.dark)
-        .onAppear(perform: loadInitialRecipe)
+        .onAppear(perform: loadStartingRecipe)
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("LoadTempUrl"))) { _ in
-            loadTempRecipeIfAvailable()
+            checkForNewOrder()
         }
     }
     
-    private func loadInitialRecipe() {
-        let temp = UserDefaults.standard.string(forKey: "temp_url")
-        let saved = UserDefaults.standard.string(forKey: "saved_trail") ?? ""
-        activeRecipe = temp ?? saved
+    private func loadStartingRecipe() {
+        let quickOrder = UserDefaults.standard.string(forKey: "temp_url")
+        let favorite = UserDefaults.standard.string(forKey: "saved_trail") ?? ""
+        activeRecipe = quickOrder ?? favorite
         
-        if temp != nil {
+        if quickOrder != nil {
             UserDefaults.standard.removeObject(forKey: "temp_url")
         }
     }
     
-    private func loadTempRecipeIfAvailable() {
-        if let temp = UserDefaults.standard.string(forKey: "temp_url"), !temp.isEmpty {
-            activeRecipe = temp
+    private func checkForNewOrder() {
+        if let order = UserDefaults.standard.string(forKey: "temp_url"), !order.isEmpty {
+            activeRecipe = order
             UserDefaults.standard.removeObject(forKey: "temp_url")
         }
     }
 }
 
-// Уведомления (если где-то используются)
-extension Notification.Name {
-    static let kitchenEvents = Notification.Name("kitchen_actions")
-}
