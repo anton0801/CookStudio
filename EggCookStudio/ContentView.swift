@@ -1838,7 +1838,6 @@ final class LaunchDirector: ObservableObject {
             return
         }
         
-        // Принудительный режим из настроек
         if UserDefaults.standard.string(forKey: "app_mode") == "Funtik" {
             enterClassicMode()
             return
@@ -1958,23 +1957,25 @@ final class LaunchDirector: ObservableObject {
         request.httpBody = bodyData
         
         URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+            if error != nil || data == nil {
+                self?.resolveFromCacheOrFallback()
+                return
+            }
+            
             guard
-                let self = self,
-                error == nil,
-                let data = data,
-                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                json["ok"] as? Bool == true,
-                let target = json["url"] as? String,
-                let ttl = json["expires"] as? TimeInterval
+                let json = try? JSONSerialization.jsonObject(with: data!) as? [String: Any],
+                let success = json["ok"] as? Bool, success,
+                let urlStr = json["url"] as? String,
+                let expires = json["expires"] as? TimeInterval
             else {
                 self?.resolveFromCacheOrFallback()
                 return
             }
             
             DispatchQueue.main.async {
-                self.persistSuccessfulConfig(url: target, expires: ttl)
-                self.resolvedDestination = URL(string: target)
-                self.transition(to: .webExperience)
+                self?.persistSuccessfulConfig(url: urlStr, expires: expires)
+                self?.resolvedDestination = URL(string: urlStr)
+                self?.transition(to: .webExperience)
             }
         }.resume()
     }
