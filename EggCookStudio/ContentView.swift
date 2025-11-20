@@ -1844,11 +1844,11 @@ final class LaunchDirector: ObservableObject {
             return
         }
         
-//        if neverLaunchedBefore,
-//           conversionData["af_status"] as? String == "Organic" {
-//            triggerOrganicValidationFlow()
-//            return
-//        }
+        if neverLaunchedBefore,
+           conversionData["af_status"] as? String == "Organic" {
+            triggerOrganicValidationFlow()
+            return
+        }
         
         if let tempRaw = UserDefaults.standard.string(forKey: "temp_url"),
            let url = URL(string: tempRaw), !tempRaw.isEmpty {
